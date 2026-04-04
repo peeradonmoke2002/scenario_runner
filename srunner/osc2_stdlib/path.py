@@ -105,6 +105,7 @@ class Path:
         start_point = start_point.split(",")
         end_point = end_point.split(",")
         cls.is_explicit = PathExplicit(start_point, end_point, tolerance)
+        print(cls.is_explicit)
 
     @classmethod
     def path_over_speed_limit_change(cls, first_speed, sec_speed):
@@ -139,7 +140,6 @@ class Path:
             len_ok = carla_data.CarlaDataProvider.check_road_length(wp, cls._length)
             if not len_ok:
                 return False
-
         # Check if the test road is signposted
         if cls.sign_type:
             is_sign = PathTrafficSign.path_has_traffic_sign(
@@ -147,7 +147,6 @@ class Path:
             )
             if not is_sign:
                 return False
-
         # Restricted test roads cannot be signposted
         if cls.sign_types:
             no_sign = PathTrafficSign.path_has_no_traffic_signs(

@@ -33,7 +33,10 @@ class Range(object):
         return self
 
     def is_in_range(self, num) -> bool:
-        return num >= self.start and num < self.end
+        if num >= self.start and num < self.end:
+            return True
+        else:
+            return False
 
     def gen_single_value(self):
         return random.uniform(self.start, self.end)
@@ -79,7 +82,10 @@ class Physical(object):
             return value == self.num
 
     def is_single_value(self) -> bool:
-        return not isinstance(self.num, Range)
+        if isinstance(self.num, Range):
+            return False
+        else:
+            return True
 
     def gen_single_value(self):
         if self.is_single_value():
