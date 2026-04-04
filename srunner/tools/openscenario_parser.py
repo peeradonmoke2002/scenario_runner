@@ -11,7 +11,7 @@ This module provides a parser for scenario configuration files based on OpenSCEN
 
 from __future__ import print_function
 
-from srunner.tools.util import strtobool
+from distutils.util import strtobool
 import re
 import copy
 import datetime
@@ -84,7 +84,7 @@ def oneshot_with_check(variable_name, behaviour, name=None):
     """
     blackboard = py_trees.blackboard.Blackboard()
     # check if the variable_name already exists in the blackboard
-    if blackboard.get(variable_name) is not None:
+    if blackboard.exists(variable_name) and blackboard.get(variable_name) is not None:
         print("Warning: {} is already used before. Check your XOSC for duplicated names".format(variable_name))
 
     return oneshot_behavior(variable_name, behaviour, name)
@@ -105,10 +105,7 @@ class ParameterRef:
         """
         Returns: True when text is a literal/number
         """
-        return (
-            self._is_matching(pattern=r"(-)?\d+(\.\d*)?")
-            or self._is_matching(pattern=r"[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?")
-        )
+        return self._is_matching(pattern=r"(-)?\d+(\.\d*)?(e[+-]\d*)?")
 
     def is_parameter(self) -> bool:
         """
@@ -135,7 +132,7 @@ class ParameterRef:
         elif self.is_parameter():
             value = CarlaDataProvider.get_osc_global_param_value(self.reference_text)
             if value is None:
-                raise ValueError("Parameter '{}' is not defined".format(self.reference_text[1:]))
+                raise Exception("Parameter '{}' is not defined".format(self.reference_text[1:]))
         else:
             value = None
         return value
@@ -145,14 +142,14 @@ class ParameterRef:
         if value is not None:
             return float(value)
         else:
-            raise ValueError("could not convert '{}' to float".format(self.reference_text))
+            raise Exception("could not convert '{}' to float".format(self.reference_text))
 
     def __int__(self) -> int:
         value = self.get_interpreted_value()
         if value is not None:
             return int(float(value))
         else:
-            raise ValueError("could not convert '{}' to int".format(self.reference_text))
+            raise Exception("could not convert '{}' to int".format(self.reference_text))
 
     def __str__(self) -> str:
         value = self.get_interpreted_value()
@@ -224,8 +221,6 @@ class ParameterRef:
 
     def __abs__(self):
         return abs(self.__float__())
-
-    # TODO: Should implement __hash__
 
 
 class OpenScenarioParser(object):
@@ -1184,7 +1179,7 @@ class OpenScenarioParser(object):
             raise AttributeError("Unknown condition")
 
         if delay_atomic is not None and atomic is not None:
-            new_atomic = py_trees.composites.Sequence("delayed sequence")
+            new_atomic = py_trees.composites.Sequence("delayed sequence", True)
             new_atomic.add_child(delay_atomic)
             new_atomic.add_child(atomic)
         else:
@@ -1248,7 +1243,7 @@ class OpenScenarioParser(object):
                     OpenScenarioParser.get_friction_from_env_action(global_action, catalogs))
 
                 env_behavior = py_trees.composites.Parallel(
-                    policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name=maneuver_name)
+                    policy=py_trees.common.ParallelPolicy.SuccessOnAll(), name=maneuver_name)
 
                 env_behavior.add_child(
                     oneshot_with_check(variable_name=maneuver_name + ">WeatherUpdate", behaviour=weather_behavior))
@@ -1521,10 +1516,11 @@ class OpenScenarioParser(object):
             else:
                 raise AttributeError("Unknown private action")
 
-        elif list(action):
-            raise AttributeError("Unknown action: {}".format(maneuver_name))
         else:
-            return Idle(duration=0, name=maneuver_name)
+            if list(action):
+                raise AttributeError("Unknown action: {}".format(maneuver_name))
+            else:
+                return Idle(duration=0, name=maneuver_name)
 
         return atomic
 

@@ -49,19 +49,14 @@ def get_value_parameter(config, name, p_type, default):
 class ParkingExit(BasicScenario):
     """
     This class holds everything required for a scenario in which the ego would be teleported to the parking lane.
-    Once the scenario is triggered, the OutsideRouteLanesTest will be deactivated since the ego is out of the
-    driving lane.
+    Once the scenario is triggered, the OutsideRouteLanesTest will be deactivated since the ego is out of the driving lane.
     Then blocking vehicles will be generated in front of and behind the parking point.
     The ego need to exit from the parking lane and then merge into the driving lane.
-    After the ego is {end_distance} meters away from the parking point,
-    the OutsideRouteLanesTest will be activated and the scenario ends.
+    After the ego is {end_distance} meters away from the parking point, the OutsideRouteLanesTest will be activated and the scenario ends.
 
-    Note:
-        For route mode, this shall be the first scenario of the route.
-        The trigger point shall be the first point of the route waypoints.
+    Note 1: For route mode, this shall be the first scenario of the route. The trigger point shall be the first point of the route waypoints.
 
-    Note:
-        Make sure there are enough space for spawning blocking vehicles.
+    Note 2: Make sure there are enough space for spawning blocking vehicles.
     """
 
     def __init__(self, world, ego_vehicles, config, debug_mode=False, criteria_enable=True,
@@ -143,13 +138,9 @@ class ParkingExit(BasicScenario):
         self.parking_slots.append(behind_points[0].transform.location)
 
         actor_behind = CarlaDataProvider.request_new_actor(
-            "vehicle.*",
-            behind_points[0].transform,
-            rolename="scenario no lights",
-            attribute_filter=self._bp_attributes,
-        )
+            'vehicle.*', behind_points[0].transform, rolename='scenario no lights', attribute_filter=self._bp_attributes)
         if actor_behind is None:
-            CarlaDataProvider.remove_actor_by_id(actor_front.id)
+            actor_front.destroy()
             raise ValueError("Couldn't spawn the vehicle behind the parking point")
         actor_behind.apply_control(carla.VehicleControl(hand_brake=True))
         self.other_actors.append(actor_behind)
@@ -197,18 +188,18 @@ class ParkingExit(BasicScenario):
         After ego drives away, activate OutsideRouteLanesTest, end scenario.
         """
 
-        sequence = py_trees.composites.Sequence(name="ParkingExit")
+        sequence = py_trees.composites.Sequence("ParkingExit", True)
         sequence.add_child(ChangeRoadBehavior(spawn_dist=self._flow_distance))
-        root = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        root = py_trees.composites.Parallel(name="RootParkingExit", policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
-        side_actor_behavior = py_trees.composites.Sequence()
+        side_actor_behavior = py_trees.composites.Sequence("side_actor_behavior", True)
         side_actor_behavior.add_child(ChangeAutoPilot(self.other_actors[2], True))
         side_actor_behavior.add_child(DriveDistance(self.other_actors[2], self._side_end_distance))
         side_actor_behavior.add_child(ActorTransformSetter(self.other_actors[2], self._end_side_transform, False))
         side_actor_behavior.add_child(WaitForever())
         root.add_child(side_actor_behavior)
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(name="ParkingExitEnd", policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         end_condition.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         root.add_child(end_condition)

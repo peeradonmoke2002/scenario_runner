@@ -13,6 +13,7 @@ version 0.8.x
 """
 
 import py_trees
+import operator
 
 
 class Decorator(py_trees.behaviour.Behaviour):
@@ -44,6 +45,7 @@ class Decorator(py_trees.behaviour.Behaviour):
         # Give a convenient alias
         self.decorated = self.children[0]
         self.decorated.parent = self
+        self.blackboard = self.attach_blackboard_client(name=name)
 
     def tick(self):
         """
@@ -110,27 +112,23 @@ def oneshot_behavior(variable_name, behaviour, name=None):
     subtree_root = py_trees.composites.Selector(name=name)
 
     # Initialize the variables
-    blackboard = py_trees.blackboard.Blackboard()
+    blackboard = py_trees.blackboard.Client(name=name)
+    blackboard.register_key(key=variable_name, access=py_trees.common.Access.WRITE)
     _ = blackboard.set(variable_name, False)
 
     # Wait until the scenario has ended
-    check_flag = py_trees.blackboard.CheckBlackboardVariable(
+    check_flag = py_trees.behaviours.WaitForBlackboardVariableValue(
         name=variable_name + " Done?",
-        variable_name=variable_name,
-        expected_value=True,
-        clearing_policy=py_trees.common.ClearingPolicy.ON_INITIALISE
+        check= py_trees.common.ComparisonExpression(variable=variable_name,value= True,operator=operator.eq)
     )
-    set_flag = py_trees.blackboard.SetBlackboardVariable(
-        name="Mark Done",
-        variable_name=variable_name,
-        variable_value=True
-    )
+    set_flag = py_trees.behaviours.SetBlackboardVariable("Mark Done", variable_name, True, overwrite=True)
+    
     # If it's a sequence, don't double-nest it in a redundant manner
     if isinstance(behaviour, py_trees.composites.Sequence):
         behaviour.add_child(set_flag)
         sequence = behaviour
     else:
-        sequence = py_trees.composites.Sequence(name="OneShot")
+        sequence = py_trees.composites.Sequence("OneShot", True)
         sequence.add_children([behaviour, set_flag])
 
     subtree_root.add_children([check_flag, sequence])

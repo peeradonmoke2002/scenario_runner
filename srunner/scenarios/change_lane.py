@@ -112,7 +112,7 @@ class ChangeLane(BasicScenario):
 
         # sequence vw
         # make visible
-        sequence_vw = py_trees.composites.Sequence("VW T2")
+        sequence_vw = py_trees.composites.Sequence("VW T2", True)
         vw_visible = ActorTransformSetter(self.other_actors[1], self.slow_car_visible)
         sequence_vw.add_child(vw_visible)
 
@@ -123,13 +123,13 @@ class ChangeLane(BasicScenario):
 
         # sequence tesla
         # make visible
-        sequence_tesla = py_trees.composites.Sequence("Tesla")
+        sequence_tesla = py_trees.composites.Sequence("Tesla", True)
         tesla_visible = ActorTransformSetter(self.other_actors[0], self.fast_car_visible)
         sequence_tesla.add_child(tesla_visible)
 
         # drive fast towards slow vehicle
         just_drive = py_trees.composites.Parallel("DrivingTowardsSlowVehicle",
-                                                  policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+                                                  policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         tesla_driving_fast = WaypointFollower(self.other_actors[0], self._fast_vehicle_velocity)
         just_drive.add_child(tesla_driving_fast)
         distance_to_vehicle = InTriggerDistanceToVehicle(
@@ -145,7 +145,7 @@ class ChangeLane(BasicScenario):
         # ego vehicle
         # end condition
         endcondition = py_trees.composites.Parallel("Waiting for end position of ego vehicle",
-                                                    policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                    policy=py_trees.common.ParallelPolicy.SuccessOnAll())
         endcondition_part1 = InTriggerDistanceToVehicle(self.other_actors[1],
                                                         self.ego_vehicles[0],
                                                         distance=20,
@@ -155,7 +155,7 @@ class ChangeLane(BasicScenario):
         endcondition.add_child(endcondition_part2)
 
         # build tree
-        root = py_trees.composites.Parallel("Parallel Behavior", policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        root = py_trees.composites.Parallel("Parallel Behavior", policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         root.add_child(sequence_vw)
         root.add_child(sequence_tesla)
         root.add_child(endcondition)

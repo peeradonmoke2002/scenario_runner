@@ -30,12 +30,7 @@ from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (I
                                                                                WaitUntilInFrontPosition)
 from srunner.scenarios.basic_scenario import BasicScenario
 
-from srunner.tools.background_manager import (
-    LeaveSpaceInFront,
-    ChangeOppositeBehavior,
-    StopBackVehicles,
-    StartBackVehicles,
-)
+from srunner.tools.background_manager import LeaveSpaceInFront, ChangeOppositeBehavior, StopBackVehicles, StartBackVehicles
 
 
 def get_value_parameter(config, name, p_type, default):
@@ -86,14 +81,7 @@ class VehicleOpensDoorTwoWays(BasicScenario):
 
         self._opposite_interval = get_interval_parameter(config, 'frequency', float, [20, 100])
 
-        super().__init__(
-            "VehicleOpensDoorTwoWays",
-            ego_vehicles,
-            config,
-            world,
-            debug_mode,
-            criteria_enable=criteria_enable,
-        )
+        super().__init__("VehicleOpensDoorTwoWays", ego_vehicles, config, world, debug_mode, criteria_enable=criteria_enable)
 
     def _get_displaced_location(self, actor, wp):
         """
@@ -131,14 +119,19 @@ class VehicleOpensDoorTwoWays(BasicScenario):
         front_wps = starting_wp.next(self._parked_distance)
         if len(front_wps) == 0:
             raise ValueError("Couldn't find a spot to place the adversary vehicle")
-        if len(front_wps) > 1:
+        elif len(front_wps) > 1:
             print("WARNING: Found a diverging lane. Choosing one at random")
-        self._front_wp = front_wps[0]
+        for front_wp in front_wps:
 
-        if self._direction == 'left':
-            self._parked_wp = self._front_wp.get_left_lane()
-        else:
-            self._parked_wp = self._front_wp.get_right_lane()
+            self._front_wp = front_wp
+
+            if self._direction == 'left':
+                self._parked_wp = self._front_wp.get_left_lane()
+            else:
+                self._parked_wp = self._front_wp.get_right_lane()
+
+            if self._parked_wp is not None:
+                break
 
         if self._parked_wp is None:
             raise ValueError("Couldn't find a spot to place the adversary vehicle")
@@ -160,28 +153,28 @@ class VehicleOpensDoorTwoWays(BasicScenario):
 
     def _create_behavior(self):
         """
-        Leave space in front, as the TM doesn't detect open doors, and change the opposite frequency
+        Leave space in front, as the TM doesn't detect open doors, and change the opposite frequency 
         so that the ego can pass
         """
         reference_wp = self._parked_wp.get_left_lane()
         if not reference_wp:
             raise ValueError("Couldnt find a left lane to spawn the opposite traffic")
 
-        root = py_trees.composites.Sequence(name="VehicleOpensDoorTwoWays")
+        root = py_trees.composites.Sequence("VehicleOpensDoorTwoWays", True)
         if self.route_mode:
             total_dist = self._parked_distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="EndOpenDoor")
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         end_condition.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._end_wp.transform, False))
 
-        behavior = py_trees.composites.Sequence(name="Main Behavior")
+        behavior = py_trees.composites.Sequence("Main Behavior", True)
 
         # Wait until ego is close to the adversary
         collision_location = self._front_wp.transform.location
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerOpenDoor")
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerOpenDoor")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(

@@ -71,14 +71,7 @@ class RouteScenario(BasicScenario):
         self.timeout = self._estimate_route_timeout()
 
         if debug_mode:
-            self._draw_waypoints(
-                world,
-                self.route,
-                vertical_shift=0.1,
-                size=0.1,
-                persistency=self.timeout,
-                downsample=5,
-            )
+            self._draw_waypoints(world, self.route, vertical_shift=0.1, size=0.1, persistency=self.timeout, downsample=5)
 
         self._build_scenarios(
             world, ego_vehicle, sampled_scenario_definitions, timeout=self.timeout, debug=debug_mode > 0
@@ -212,15 +205,7 @@ class RouteScenario(BasicScenario):
 
         return all_scenario_classes
 
-    def _build_scenarios(
-        self,
-        world,
-        ego_vehicle,
-        scenario_definitions,
-        scenarios_per_tick=5,
-        timeout=300,
-        debug=False,
-    ):
+    def _build_scenarios(self, world, ego_vehicle, scenario_definitions, scenarios_per_tick=5, timeout=300, debug=False):
         """
         Initializes the class of all the scenarios that will be present in the route.
         If a class fails to be initialized, a warning is printed but the route execution isn't stopped
@@ -282,7 +267,7 @@ class RouteScenario(BasicScenario):
         scenario_trigger_distance = DIST_THRESHOLD  # Max trigger distance between route and scenario
 
         behavior = py_trees.composites.Parallel(name="Route Behavior",
-                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                policy=py_trees.common.ParallelPolicy.SuccessOnAll())
 
         scenario_behaviors = []
         blackboard_list = []
@@ -291,8 +276,7 @@ class RouteScenario(BasicScenario):
             if scenario.behavior_tree is not None:
                 scenario_behaviors.append(scenario.behavior_tree)
                 blackboard_list.append([scenario.config.route_var_name,
-                                        scenario.config.trigger_points[0].location,
-                                        scenario.name])
+                                        scenario.config.trigger_points[0].location])
 
         # Add the behavior that manages the scenario trigger conditions
         scenario_triggerer = ScenarioTriggerer(
@@ -311,7 +295,7 @@ class RouteScenario(BasicScenario):
         and adds the scenario specific ones, which will only be active during their scenario
         """
         criteria = py_trees.composites.Parallel(name="Criteria",
-                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+                                                policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         # End condition
         criteria.add_child(RouteCompletionTest(self.ego_vehicles[0], route=self.route))
@@ -321,14 +305,7 @@ class RouteScenario(BasicScenario):
         criteria.add_child(CollisionTest(self.ego_vehicles[0], name="CollisionTest"))
         criteria.add_child(RunningRedLightTest(self.ego_vehicles[0]))
         criteria.add_child(RunningStopTest(self.ego_vehicles[0]))
-        criteria.add_child(
-            MinimumSpeedRouteTest(
-                self.ego_vehicles[0],
-                route=self.route,
-                checkpoints=4,
-                name="MinSpeedTest",
-            )
-        )
+        criteria.add_child(MinimumSpeedRouteTest(self.ego_vehicles[0], route=self.route, checkpoints=4, name="MinSpeedTest"))
 
         # These stop the route early to save computational time
         criteria.add_child(InRouteTest(
@@ -353,7 +330,7 @@ class RouteScenario(BasicScenario):
         Create the weather behavior
         """
         if len(self.config.weather) == 1:
-            return  None# Just set the weather at the beginning and done
+            return  # Just set the weather at the beginning and done
         return RouteWeatherBehavior(self.ego_vehicles[0], self.route, self.config.weather)
 
     def _create_lights_behavior(self):
@@ -386,11 +363,11 @@ class RouteScenario(BasicScenario):
         var_name = scenario.config.route_var_name
         check_name = "WaitForBlackboardVariable: {}".format(var_name)
 
-        criteria_tree = py_trees.composites.Sequence(name=scenario_name)
+        criteria_tree = py_trees.composites.Sequence(scenario_name, True)
         criteria_tree.add_child(WaitForBlackboardVariable(var_name, True, False, name=check_name))
 
         scenario_criteria = py_trees.composites.Parallel(name=scenario_name,
-                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+                                                policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         for criterion in criteria:
             scenario_criteria.add_child(criterion)
         scenario_criteria.add_child(WaitForBlackboardVariable(var_name, False, None, name=check_name))

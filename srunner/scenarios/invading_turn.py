@@ -6,9 +6,8 @@
 # For a copy, see <https://opensource.org/licenses/MIT>.
 
 """
-Scenario in which the ego is about to turn right
-when a vehicle coming from the opposite lane invades the ego's lane,
-forcing the ego to move right to avoid a possible collision.
+Scenario in which the ego is about to turn right 
+when a vehicle coming from the opposite lane invades the ego's lane, forcing the ego to move right to avoid a possible collision.
 """
 
 from __future__ import print_function
@@ -48,8 +47,8 @@ def get_value_parameter(config, name, p_type, default):
 
 class InvadingTurn(BasicScenario):
     """
-    This class holds everything required for a scenario in which the ego is about to turn right
-    when a vehicle coming from the opposite lane invades the ego's lane,
+    This class holds everything required for a scenario in which the ego is about to turn right 
+    when a vehicle coming from the opposite lane invades the ego's lane, 
     forcing the ego to move right to avoid a possible collision.
 
     This scenario is expected to take place on a road that has only one lane in each direction.
@@ -141,7 +140,7 @@ class InvadingTurn(BasicScenario):
         """
         The adversary vehicle will go to the target place while invading another lane.
         """
-        sequence = py_trees.composites.Sequence("InvadingTurn")
+        sequence = py_trees.composites.Sequence("InvadingTurn", True)
 
         if self.route_mode:
             sequence.add_child(RemoveRoadLane(self._reference_waypoint))
@@ -149,18 +148,11 @@ class InvadingTurn(BasicScenario):
 
         sequence.add_child(BatchActorTransformSetter(self._obstacle_transforms))
 
-        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="InvadingTurnMain")
         main_behavior.add_child(InvadingActorFlow(
             self._source_wp, self._sink_wp, self.ego_vehicles[0], self._flow_frequency, offset=self._true_offset))
 
-        main_behavior.add_child(
-            WaitUntilInFrontPosition(
-                self.ego_vehicles[0],
-                self._forward_wp.transform,
-                True,
-                self._check_distance,
-            )
-        )
+        main_behavior.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._forward_wp.transform, True, self._check_distance))
         main_behavior.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
 
         sequence.add_child(main_behavior)

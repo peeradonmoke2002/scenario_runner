@@ -53,7 +53,7 @@ class BasicScenario(object):
 
         # If no timeout was provided, set it to 60 seconds
         if not hasattr(self, 'timeout'):
-            self.timeout = 60
+            self.timeout = 60 
         if debug_mode:
             py_trees.logging.level = py_trees.logging.Level.DEBUG
 
@@ -71,10 +71,10 @@ class BasicScenario(object):
             world.wait_for_tick()
 
         # Main scenario tree
-        self.scenario_tree = py_trees.composites.Parallel(name, policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        self.scenario_tree = py_trees.composites.Parallel(name, policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         # Add a trigger and end condition to the behavior to ensure it is only activated when it is relevant
-        self.behavior_tree = py_trees.composites.Sequence()
+        self.behavior_tree = py_trees.composites.Sequence('Sequence', True) # default values from: https://py-trees.readthedocs.io/_/downloads/en/release-2.1.x/pdf/
 
         trigger_behavior = self._setup_scenario_trigger(config)
         if trigger_behavior:
@@ -116,7 +116,7 @@ class BasicScenario(object):
                     criterion.terminate_on_failure = terminate_on_failure
 
                 self.criteria_tree = py_trees.composites.Parallel(name="Test Criteria",
-                                                                  policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                                  policy=py_trees.common.ParallelPolicy.SuccessOnAll())
                 self.criteria_tree.add_children(criteria)
                 self.criteria_tree.setup(timeout=1)
 
@@ -171,14 +171,6 @@ class BasicScenario(object):
 
             for new_actor in new_actors:
                 self.other_actors.append(new_actor)
-                
-    def _destroy_other_actors(self):
-        """
-        Remove all actors upon deletion
-        """
-        for actor in self.other_actors:
-            if CarlaDataProvider.remove_actor_by_id(actor.id) is None:
-                actor.destroy()
 
     def _setup_scenario_trigger(self, config):
         """
@@ -210,9 +202,9 @@ class BasicScenario(object):
             return None
 
         # Scenario is part of a route.
-        end_sequence = py_trees.composites.Sequence()
+        end_sequence = py_trees.composites.Sequence("end_sequence", True)
         name = "Reset Blackboard Variable: {} ".format(config.route_var_name)
-        end_sequence.add_child(py_trees.blackboard.SetBlackboardVariable(name, config.route_var_name, False))
+        end_sequence.add_child(py_trees.behaviours.SetBlackboardVariable(name, config.route_var_name, False, overwrite=True))
         end_sequence.add_child(WaitForever())  # scenario can't stop the route
 
         return end_sequence
@@ -317,13 +309,13 @@ class BasicScenario(object):
         # Cleanup all instantiated controllers
         actor_dict = {}
         try:
-            check_actors = operator.attrgetter("ActorsWithController")
-            actor_dict = check_actors(py_trees.blackboard.Blackboard())
-        except AttributeError:
+            actor_dict = py_trees.blackboard.Blackboard().get("ActorsWithController")
+        except KeyError:
             pass
         for actor_id in actor_dict:
             actor_dict[actor_id].reset()
-        py_trees.blackboard.Blackboard().set("ActorsWithController", {}, overwrite=True)
+        #py_trees.blackboard.Blackboard().unset("ActorsWithController")
+        py_trees.blackboard.Blackboard().set("ActorsWithController", {})
 
     def remove_all_actors(self):
         """

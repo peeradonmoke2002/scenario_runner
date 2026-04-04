@@ -107,7 +107,7 @@ class FollowLeadingVehicle(BasicScenario):
         # let the other actor drive until next intersection
         driving_to_next_intersection = py_trees.composites.Parallel(
             "DrivingTowardsIntersection",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         driving_to_next_intersection.add_child(WaypointFollower(self.other_actors[0], self._first_vehicle_speed))
         driving_to_next_intersection.add_child(InTriggerDistanceToNextIntersection(
@@ -118,7 +118,7 @@ class FollowLeadingVehicle(BasicScenario):
 
         # end condition
         endcondition = py_trees.composites.Parallel("Waiting for end position",
-                                                    policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                    policy=py_trees.common.ParallelPolicy.SuccessOnAll())
         endcondition_part1 = InTriggerDistanceToVehicle(self.other_actors[0],
                                                         self.ego_vehicles[0],
                                                         distance=20,
@@ -128,7 +128,7 @@ class FollowLeadingVehicle(BasicScenario):
         endcondition.add_child(endcondition_part2)
 
         # Build behavior tree
-        sequence = py_trees.composites.Sequence("Sequence Behavior")
+        sequence = py_trees.composites.Sequence("Sequence Behavior", True)
         sequence.add_child(driving_to_next_intersection)
         sequence.add_child(stop)
         sequence.add_child(endcondition)
@@ -245,16 +245,16 @@ class FollowLeadingVehicleWithObstacle(BasicScenario):
         # let the other actor drive until next intersection
         driving_to_next_intersection = py_trees.composites.Parallel(
             "Driving towards Intersection",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         obstacle_clear_road = py_trees.composites.Parallel("Obstalce clearing road",
-                                                           policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+                                                           policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         obstacle_clear_road.add_child(DriveDistance(self.other_actors[1], 4))
         obstacle_clear_road.add_child(KeepVelocity(self.other_actors[1], self._second_actor_speed))
 
         stop_near_intersection = py_trees.composites.Parallel(
             "Waiting for end position near Intersection",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         stop_near_intersection.add_child(WaypointFollower(self.other_actors[0], 10))
         stop_near_intersection.add_child(InTriggerDistanceToNextIntersection(self.other_actors[0], 20))
 
@@ -264,7 +264,7 @@ class FollowLeadingVehicleWithObstacle(BasicScenario):
 
         # end condition
         endcondition = py_trees.composites.Parallel("Waiting for end position",
-                                                    policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                    policy=py_trees.common.ParallelPolicy.SuccessOnAll())
         endcondition_part1 = InTriggerDistanceToVehicle(self.other_actors[0],
                                                         self.ego_vehicles[0],
                                                         distance=20,
@@ -274,7 +274,7 @@ class FollowLeadingVehicleWithObstacle(BasicScenario):
         endcondition.add_child(endcondition_part2)
 
         # Build behavior tree
-        sequence = py_trees.composites.Sequence("Sequence Behavior")
+        sequence = py_trees.composites.Sequence("Sequence Behavior", True)
         sequence.add_child(ActorTransformSetter(self.other_actors[0], self._first_actor_transform))
         sequence.add_child(ActorTransformSetter(self.other_actors[1], self._second_actor_transform))
         sequence.add_child(driving_to_next_intersection)

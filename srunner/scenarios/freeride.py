@@ -39,12 +39,12 @@ class FreeRide(BasicScenario):
     def _setup_scenario_trigger(self, config):
         """
         """
-        return
+        return None
 
     def _create_behavior(self):
         """
         """
-        sequence = py_trees.composites.Sequence("Sequence Behavior")
+        sequence = py_trees.composites.Sequence("Sequence Behavior", True)
         sequence.add_child(Idle())
         return sequence
 

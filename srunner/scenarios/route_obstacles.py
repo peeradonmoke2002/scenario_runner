@@ -65,7 +65,7 @@ class Accident(BasicScenario):
         self._world = world
         self._map = CarlaDataProvider.get_map()
         self.timeout = timeout
-
+        
         self._first_distance = 10
         self._second_distance = 6
 
@@ -74,11 +74,7 @@ class Accident(BasicScenario):
         self._wait_duration = 5
         self._offset = 0.6
 
-        self._lights = (
-            carla.VehicleLightState.Special1
-            | carla.VehicleLightState.Special2
-            | carla.VehicleLightState.Position
-        )
+        self._lights = carla.VehicleLightState.Special1 | carla.VehicleLightState.Special2 | carla.VehicleLightState.Position
 
         self._distance = get_value_parameter(config, 'distance', float, 120)
         self._direction = get_value_parameter(config, 'direction', str, 'right')
@@ -141,11 +137,7 @@ class Accident(BasicScenario):
         spawn_transform.location += carla.Location(x=displacement * r_vec.x, y=displacement * r_vec.y, z=1)
         if accident_actor:
             actor = CarlaDataProvider.request_new_actor(
-                blueprint,
-                spawn_transform,
-                rolename="scenario no lights",
-                attribute_filter={"base_type": "car", "generation": 2},
-            )
+                blueprint, spawn_transform, rolename='scenario no lights', attribute_filter={'base_type': 'car', 'generation': 2})
         else:
             actor = CarlaDataProvider.request_new_actor(
                 blueprint, spawn_transform, rolename='scenario')
@@ -198,16 +190,16 @@ class Accident(BasicScenario):
         The vehicle has to drive the reach a specific point but an accident is in the middle of the road,
         blocking its route and forcing it to lane change.
         """
-        root = py_trees.composites.Sequence(name="Accident")
+        root = py_trees.composites.Sequence("Accident", True)
         if self.route_mode:
             total_dist = self._distance + self._first_distance + self._second_distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="AccidentEnd")
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         end_condition.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._end_wp.transform, False))
 
-        behavior = py_trees.composites.Sequence()
+        behavior = py_trees.composites.Sequence("behavior", True)
         behavior.add_child(InTriggerDistanceToLocation(
             self.ego_vehicles[0], self._first_vehicle_wp.transform.location, self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))
@@ -246,17 +238,8 @@ class AccidentTwoWays(Accident):
     """
     Variation of the Accident scenario but the ego now has to invade the opposite lane
     """
+    def __init__(self, world, ego_vehicles, config, randomize=False, debug_mode=False, criteria_enable=True, timeout=180):
 
-    def __init__(
-        self,
-        world,
-        ego_vehicles,
-        config,
-        randomize=False,
-        debug_mode=False,
-        criteria_enable=True,
-        timeout=180,
-    ):
         self._opposite_interval = get_interval_parameter(config, 'frequency', float, [20, 100])
         super().__init__(world, ego_vehicles, config, randomize, debug_mode, criteria_enable, timeout)
 
@@ -269,16 +252,16 @@ class AccidentTwoWays(Accident):
         if not reference_wp:
             raise ValueError("Couldnt find a left lane to spawn the opposite traffic")
 
-        root = py_trees.composites.Sequence(name="AccidentTwoWays")
+        root = py_trees.composites.Sequence("AccidentTwoWays", True)
         if self.route_mode:
             total_dist = self._distance + self._first_distance + self._second_distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="AccidentTwoWaysEnd")
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         end_condition.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._end_wp.transform, False))
 
-        behavior = py_trees.composites.Sequence()
+        behavior = py_trees.composites.Sequence("behavior", True)
         behavior.add_child(InTriggerDistanceToLocation(
             self.ego_vehicles[0], self._first_vehicle_wp.transform.location, self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))
@@ -319,11 +302,7 @@ class ParkedObstacle(BasicScenario):
         self._wait_duration = 5
         self._offset = 0.7
 
-        self._lights = (
-            carla.VehicleLightState.RightBlinker
-            | carla.VehicleLightState.LeftBlinker
-            | carla.VehicleLightState.Position
-        )
+        self._lights = carla.VehicleLightState.RightBlinker | carla.VehicleLightState.LeftBlinker | carla.VehicleLightState.Position
 
         self._distance = get_value_parameter(config, 'distance', float, 120)
         self._direction = get_value_parameter(config, 'direction', str, 'right')
@@ -385,11 +364,7 @@ class ParkedObstacle(BasicScenario):
         spawn_transform = wp.transform
         spawn_transform.location += carla.Location(x=displacement * r_vec.x, y=displacement * r_vec.y, z=1)
         actor = CarlaDataProvider.request_new_actor(
-            blueprint,
-            spawn_transform,
-            rolename="scenario no lights",
-            attribute_filter={"base_type": "car", "generation": 2},
-        )
+            blueprint, spawn_transform, rolename='scenario no lights', attribute_filter={'base_type': 'car', 'generation': 2})
         if not actor:
             raise ValueError("Couldn't spawn an obstacle actor")
 
@@ -420,16 +395,16 @@ class ParkedObstacle(BasicScenario):
         """
         The vehicle has to drive the whole predetermined distance.
         """
-        root = py_trees.composites.Sequence(name="ParkedObstacle")
+        root = py_trees.composites.Sequence("ParkedObstacle", True)
         if self.route_mode:
             total_dist = self._distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="ParkedObstacleEnd")
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         end_condition.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._end_wp.transform, False))
 
-        behavior = py_trees.composites.Sequence()
+        behavior = py_trees.composites.Sequence("behavior", True)
         behavior.add_child(InTriggerDistanceToLocation(
             self.ego_vehicles[0], self._vehicle_wp.transform.location, self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))
@@ -468,17 +443,8 @@ class ParkedObstacleTwoWays(ParkedObstacle):
     """
     Variation of the ParkedObstacle scenario but the ego now has to invade the opposite lane
     """
+    def __init__(self, world, ego_vehicles, config, randomize=False, debug_mode=False, criteria_enable=True, timeout=180):
 
-    def __init__(
-        self,
-        world,
-        ego_vehicles,
-        config,
-        randomize=False,
-        debug_mode=False,
-        criteria_enable=True,
-        timeout=180,
-    ):
         self._opposite_interval = get_interval_parameter(config, 'frequency', float, [20, 100])
         super().__init__(world, ego_vehicles, config, randomize, debug_mode, criteria_enable, timeout)
 
@@ -491,16 +457,16 @@ class ParkedObstacleTwoWays(ParkedObstacle):
         if not reference_wp:
             raise ValueError("Couldnt find a left lane to spawn the opposite traffic")
 
-        root = py_trees.composites.Sequence(name="ParkedObstacleTwoWays")
+        root = py_trees.composites.Sequence("ParkedObstacleTwoWays", True)
         if self.route_mode:
             total_dist = self._distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
 
-        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="ParkedObstacleTwoWaysEnd")
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         end_condition.add_child(WaitUntilInFrontPosition(self.ego_vehicles[0], self._end_wp.transform, False))
 
-        behavior = py_trees.composites.Sequence()
+        behavior = py_trees.composites.Sequence("behavior", True)
         behavior.add_child(InTriggerDistanceToLocation(
             self.ego_vehicles[0], self._vehicle_wp.transform.location, self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))
@@ -627,17 +593,17 @@ class HazardAtSideLane(BasicScenario):
         Activate the bicycles and wait for the ego to be close-by before changing the side traffic.
         End condition is based on the ego behind in front of the bicycles, or timeout based.
         """
-        root = py_trees.composites.Sequence(name="HazardAtSideLane")
+        root = py_trees.composites.Sequence("HazardAtSideLane", True)
         if self.route_mode:
             total_dist = self._distance + self._obstacle_distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
             root.add_child(ChangeRoadBehavior(extra_space=self._extra_space))
 
-        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="HazardAtSideLaneMain")
         main_behavior.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
 
         # End condition
-        end_condition = py_trees.composites.Sequence(name="End Condition")
+        end_condition = py_trees.composites.Sequence("End Condition", True)
         end_condition.add_child(WaitUntilInFront(self.ego_vehicles[0], self.other_actors[-1], check_distance=False))
         end_condition.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         main_behavior.add_child(end_condition)
@@ -646,20 +612,13 @@ class HazardAtSideLane(BasicScenario):
         offset = self._offset * self._starting_wp.lane_width / 2
         opt_dict = {'offset': offset}
         for actor, target_loc in zip(self.other_actors, self._target_locs):
-            bicycle = py_trees.composites.Sequence(name="Bicycle behavior")
-            bicycle.add_child(
-                BasicAgentBehavior(
-                    actor,
-                    target_loc,
-                    target_speed=self._bicycle_speed,
-                    opt_dict=opt_dict,
-                )
-            )
+            bicycle = py_trees.composites.Sequence("Bicycle behavior", True)
+            bicycle.add_child(BasicAgentBehavior(actor, target_loc, target_speed=self._bicycle_speed, opt_dict=opt_dict))
             bicycle.add_child(HandBrakeVehicle(actor, 1))  # In case of collisions
             bicycle.add_child(WaitForever())  # Don't make the bicycle stop the parallel behavior
             main_behavior.add_child(bicycle)
 
-        behavior = py_trees.composites.Sequence(name="Side lane behavior")
+        behavior = py_trees.composites.Sequence("Side lane behavior", True)
         behavior.add_child(InTriggerDistanceToVehicle(
             self.ego_vehicles[0], self.other_actors[0], self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))
@@ -700,17 +659,8 @@ class HazardAtSideLaneTwoWays(HazardAtSideLane):
     """
     Variation of the HazardAtSideLane scenario but the ego now has to invade the opposite lane
     """
+    def __init__(self, world, ego_vehicles, config, randomize=False, debug_mode=False, criteria_enable=True, timeout=180):
 
-    def __init__(
-        self,
-        world,
-        ego_vehicles,
-        config,
-        randomize=False,
-        debug_mode=False,
-        criteria_enable=True,
-        timeout=180,
-    ):
         self._opposite_frequency = get_value_parameter(config, 'frequency', float, 100)
 
         super().__init__(world, ego_vehicles, config, randomize, debug_mode, criteria_enable, timeout)
@@ -721,17 +671,17 @@ class HazardAtSideLaneTwoWays(HazardAtSideLane):
         End condition is based on the ego behind in front of the bicycles, or timeout based.
         """
 
-        root = py_trees.composites.Sequence(name="HazardAtSideLaneTwoWays")
+        root = py_trees.composites.Sequence("HazardAtSideLaneTwoWays", True)
         if self.route_mode:
             total_dist = self._distance + self._obstacle_distance + 20
             root.add_child(LeaveSpaceInFront(total_dist))
             root.add_child(ChangeRoadBehavior(extra_space=self._extra_space))
 
-        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="HazardAtSideLaneTwoWaysMain")
         main_behavior.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
 
         # End condition
-        end_condition = py_trees.composites.Sequence(name="End Condition")
+        end_condition = py_trees.composites.Sequence("End Condition", True)
         end_condition.add_child(WaitUntilInFront(self.ego_vehicles[0], self.other_actors[-1], check_distance=False))
         end_condition.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         main_behavior.add_child(end_condition)
@@ -740,20 +690,13 @@ class HazardAtSideLaneTwoWays(HazardAtSideLane):
         offset = self._offset * self._starting_wp.lane_width / 2
         opt_dict = {'offset': offset}
         for actor, target_loc in zip(self.other_actors, self._target_locs):
-            bicycle = py_trees.composites.Sequence(name="Bicycle behavior")
-            bicycle.add_child(
-                BasicAgentBehavior(
-                    actor,
-                    target_loc,
-                    target_speed=self._bicycle_speed,
-                    opt_dict=opt_dict,
-                )
-            )
+            bicycle = py_trees.composites.Sequence("Bicycle behavior", True)
+            bicycle.add_child(BasicAgentBehavior(actor, target_loc, target_speed=self._bicycle_speed, opt_dict=opt_dict))
             bicycle.add_child(HandBrakeVehicle(actor, 1))  # In case of collisions
             bicycle.add_child(WaitForever())  # Don't make the bicycle stop the parallel behavior
             main_behavior.add_child(bicycle)
 
-        behavior = py_trees.composites.Sequence(name="Side lane behavior")
+        behavior = py_trees.composites.Sequence("Side lane behavior", True)
         behavior.add_child(InTriggerDistanceToVehicle(
             self.ego_vehicles[0], self.other_actors[0], self._trigger_distance))
         behavior.add_child(Idle(self._wait_duration))

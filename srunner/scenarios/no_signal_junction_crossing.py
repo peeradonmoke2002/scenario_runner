@@ -21,11 +21,7 @@ from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (ActorTrans
                                                                       KeepVelocity,
                                                                       StopVehicle)
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
-from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (
-    InTriggerRegion,
-    DriveDistance,
-    WaitEndIntersection,
-)
+from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import InTriggerRegion, DriveDistance, WaitEndIntersection
 from srunner.scenarios.basic_scenario import BasicScenario
 
 
@@ -125,12 +121,14 @@ class NoSignalJunctionCrossing(BasicScenario):
         )
 
         # Creating non-leaf nodes
-        root = py_trees.composites.Sequence()
-        scenario_sequence = py_trees.composites.Sequence()
+        root = py_trees.composites.Sequence("root", True)
+        scenario_sequence = py_trees.composites.Sequence("scenario_sequence", True)
         sync_arrival_parallel = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            name="NoSignalJunctionCrossingSyncArrival",
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         keep_velocity_other_parallel = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            name="NoSignalJunctionCrossingKeepVelocity",
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         # Building tree
         root.add_child(scenario_sequence)
@@ -197,8 +195,8 @@ class NoSignalJunctionCrossingRoute(BasicScenario):
         """
         Just wait for the ego to exit the junction, for route the BackgroundActivity already does all the job
         """
-        sequence = py_trees.composites.Sequence("UnSignalizedJunctionCrossingRoute")
-        sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]))
+        sequence = py_trees.composites.Sequence("UnSignalizedJunctionCrossingRoute", True)
+        sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]), True)
         sequence.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         return sequence
 
