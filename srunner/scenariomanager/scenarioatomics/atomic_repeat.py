@@ -25,7 +25,6 @@ class Decorator(behaviour.Behaviour):
         # Give a convenient alias
         self.decorated = self.children[0]
         self.decorated.parent = self
-        self.status = common.Status.INVALID
 
     def tick(self):
         """
@@ -39,7 +38,8 @@ class Decorator(behaviour.Behaviour):
             self.initialise()
         # interrupt proceedings and process the child node
         # (including any children it may have as well)
-        yield from self.decorated.tick()
+        for node in self.decorated.tick():
+            yield node
         # resume normal proceedings for a Behaviour's tick
         new_status = self.update()
         if new_status not in list(common.Status):
