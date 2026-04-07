@@ -45,7 +45,7 @@ class Decorator(py_trees.behaviour.Behaviour):
         # Give a convenient alias
         self.decorated = self.children[0]
         self.decorated.parent = self
-        self.blackboard = self.attach_blackboard_client(name=name)
+        self.blackboard = py_trees.blackboard.Blackboard()
 
     def tick(self):
         """
@@ -128,7 +128,7 @@ def oneshot_behavior(variable_name, behaviour, name=None):
         behaviour.add_child(set_flag)
         sequence = behaviour
     else:
-        sequence = py_trees.composites.Sequence("OneShot", True)
+        sequence = py_trees.composites.Sequence("OneShot")
         sequence.add_children([behaviour, set_flag])
 
     subtree_root.add_children([check_flag, sequence])

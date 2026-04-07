@@ -125,21 +125,21 @@ class YieldToEmergencyVehicle(BasicScenario):
                 - DriveDistance
         - ReAddRoadLane
         """
-        sequence = py_trees.composites.Sequence("YieldToEmergencyVehicle", True)
+        sequence = py_trees.composites.Sequence("YieldToEmergencyVehicle")
 
         if self.route_mode:
             sequence.add_child(RemoveRoadLane(self._reference_waypoint))
 
         sequence.add_child(ActorTransformSetter(self.other_actors[0], self._ev_start_transform))
 
-        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="YieldToEmergencyVehicleMain")
+        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="YieldToEmergencyVehicleMain")
 
-        end_condition_1 = py_trees.composites.Sequence("end_condition_1", True)
+        end_condition_1 = py_trees.composites.Sequence("end_condition_1")
         end_condition_1.add_child(InTriggerDistanceToVehicle(
             self.ego_vehicles[0], self.other_actors[0], self._trigger_distance))
         end_condition_1.add_child(Idle(self._ev_idle_time))
 
-        end_condition_2 = py_trees.composites.Sequence("end_condition_2", True)
+        end_condition_2 = py_trees.composites.Sequence("end_condition_2")
         end_condition_2.add_child(WaitUntilInFront(self.other_actors[0], self.ego_vehicles[0]))
         end_condition_2.add_child(DriveDistance(self.other_actors[0], self._end_distance))
 

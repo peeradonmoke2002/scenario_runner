@@ -539,17 +539,17 @@ class OSC2Scenario(BasicScenario):
                 if composition_operator == "serial":
                     self.__cur_behavior = py_trees.composites.Sequence(
                         "serial", True,
-                        policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
                     )
                 elif composition_operator == "parallel":
                     self.__cur_behavior = py_trees.composites.Parallel(
-                        policy=py_trees.common.ParallelPolicy.SuccessOnAll(),
+                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL,
                         name="parallel",
                     )
                 elif composition_operator == "one_of":
                     self.__cur_behavior = py_trees.composites.Sequence(
                         "one_of", True,
-                        policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                        policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
                     )
                     do_member_list = []
                     for child in node.get_children():
@@ -621,11 +621,11 @@ class OSC2Scenario(BasicScenario):
         def visit_wait_directive(self, node: ast_node.WaitDirective):
             behaviors = py_trees.composites.Sequence(
                 "wait", True,
-                policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
             )
             subbehavior = py_trees.composites.Sequence(
                 "behavior", True,
-                policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
             )
 
             if node.get_child_count() == 1 and isinstance(
@@ -681,7 +681,7 @@ class OSC2Scenario(BasicScenario):
         def visit_emit_directive(self, node: ast_node.EmitDirective):
             behaviors = py_trees.composites.Sequence(
                 "emit", True,
-                policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
             )
             function_name = node.event_name
             arguments = self.visit_children(node)
@@ -736,7 +736,7 @@ class OSC2Scenario(BasicScenario):
                 return
 
             behavior = py_trees.composites.Parallel(
-                policy=py_trees.common.ParallelPolicy.SuccessOnOne(),
+                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE,
                 name=behavior_invocation_name
                 + " duration="
                 + str(int(self.__duration)),
@@ -750,7 +750,7 @@ class OSC2Scenario(BasicScenario):
 
             actor_drive = py_trees.composites.Sequence(
                 behavior_invocation_name, True,
-                policy=py_trees.common.ParallelPolicy.SuccessOnAll()
+                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
             )
 
             modifier_invocation_no_occur = True

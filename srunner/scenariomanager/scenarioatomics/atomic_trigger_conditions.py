@@ -57,7 +57,7 @@ class AtomicCondition(py_trees.behaviour.Behaviour):
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self.name = name
 
-        self.blackboard = self.attach_blackboard_client(name=name)
+        self.blackboard = py_trees.blackboard.Blackboard()
 
     def setup(self, unused_timeout=15):
         """
@@ -514,7 +514,7 @@ class TimeOfDayComparison(AtomicCondition):
         self._datetime = datetime.datetime.strptime(dattime, "%Y-%m-%dT%H:%M:%S")
         self._comparison_operator = comparison_operator
 
-        self.blackboard.register_key(key="Datetime", access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
 
     def update(self):
         """
@@ -565,7 +565,7 @@ class OSCStartEndCondition(AtomicCondition):
         self._start_time = None
 
         blackboard_variable_name = "({}){}-{}".format(self._element_type, self._element_name, self._rule)
-        self.blackboard.register_key(key=blackboard_variable_name, access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists(blackboard_variable_name):
             self.blackboard.set(blackboard_variable_name, None, True)
@@ -1449,7 +1449,7 @@ class WaitForBlackboardVariable(AtomicCondition):
         self._variable_value = variable_value
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
 
-        self.blackboard.register_key(key=variable_name, access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
         if var_init_value is not None:
             _ = self.blackboard.set(variable_name, var_init_value)
 

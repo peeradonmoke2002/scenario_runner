@@ -104,7 +104,7 @@ class BlockedIntersection(BasicScenario):
         """
         Just wait for a while after the ego closes in on the blocker, then remove it.
         """
-        sequence = py_trees.composites.Sequence("BlockedIntersection", True)
+        sequence = py_trees.composites.Sequence("BlockedIntersection")
 
         if self.route_mode:
             sequence.add_child(HandleJunctionScenario(
@@ -118,10 +118,10 @@ class BlockedIntersection(BasicScenario):
         # Ego go behind the blocker
         main_behavior = py_trees.composites.Parallel(
             name="BlockedIntersectionRoot",
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
         main_behavior.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
 
-        behavior = py_trees.composites.Sequence("Approach and Wait", True)
+        behavior = py_trees.composites.Sequence("Approach and Wait")
         behavior.add_child(ActorTransformSetter(self.other_actors[0], self._blocker_transform, True))
         behavior.add_child(HandBrakeVehicle(self.other_actors[0], 1))
         behavior.add_child(InTriggerDistanceToVehicle(

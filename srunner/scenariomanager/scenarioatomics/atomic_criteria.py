@@ -68,7 +68,7 @@ class Criterion(py_trees.behaviour.Behaviour):
 
         self.events = []  # List of events (i.e collision, sidewalk invasion...)
 
-        self.blackboard = self.attach_blackboard_client(name=name)
+        self.blackboard = py_trees.blackboard.Blackboard()
 
     def initialise(self):
         """
@@ -439,7 +439,7 @@ class ActorBlockedTest(Criterion):
         self._active = True
         self.units = None  # We care about whether or not it fails, no units attached
 
-        self.blackboard.register_key(key="AC_SwitchActorBlockedTest", access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
         
         if not self.blackboard.exists('AC_SwitchActorBlockedTest'):
             self.blackboard.set('AC_SwitchActorBlockedTest', None, True)
@@ -1030,7 +1030,7 @@ class OutsideRouteLanesTest(Criterion):
 
         self._traffic_event = None
 
-        self.blackboard.register_key(key="AC_SwitchWrongDirectionTest", access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists('AC_SwitchWrongDirectionTest'):
             self.blackboard.set('AC_SwitchWrongDirectionTest', None, True)
@@ -1444,7 +1444,7 @@ class InRouteTest(Criterion):
             prev_loc = loc
 
 
-        self.blackboard.register_key(key="InRoute", access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
         # Blackboard variable
         blackv = self.blackboard
         _ = blackv.set("InRoute", True)
@@ -2186,7 +2186,7 @@ class ScenarioTimeoutTest(Criterion):
         self.actual_value = 0
         self._scenario_name = scenario_name
 
-        self.blackboard.register_key(key=f"ScenarioTimeout_{self._scenario_name}", access=py_trees.common.Access.WRITE)
+        pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists(f"ScenarioTimeout_{self._scenario_name}"):
             self.blackboard.set(f"ScenarioTimeout_{self._scenario_name}", None, True)

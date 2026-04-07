@@ -166,14 +166,14 @@ class BaseVehicleTurning(BasicScenario):
         continue driving after the road is clear.If this does not happen
         within 90 seconds, a timeout stops the scenario.
         """
-        sequence = py_trees.composites.Sequence("CrossingActorIntersection", True)
+        sequence = py_trees.composites.Sequence("CrossingActorIntersection")
         collision_location = self._collision_wp.transform.location
         collision_distance = collision_location.distance(self._adversary_transform.location)
         collision_duration = collision_distance / self._adversary_speed
 
         # Adversary trigger behavior
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -368,14 +368,14 @@ class VehicleTurningRoutePedestrian(BasicScenario):
     def _create_behavior(self):
         """
         """
-        sequence = py_trees.composites.Sequence("VehicleTurningRoutePedestrian", True)
+        sequence = py_trees.composites.Sequence("VehicleTurningRoutePedestrian")
         sequence.add_child(ActorTransformSetter(self.other_actors[0], self._spawn_transform, True))
 
         collision_location = self._collision_wp.transform.location
 
         # Adversary trigger behavior
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -435,7 +435,7 @@ class VehicleTurningRoutePedestrian(BasicScenario):
             return trigger_tree
 
         parallel = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="ScenarioTrigger")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="ScenarioTrigger")
 
         parallel.add_child(MovePedestrianWithEgo(self.ego_vehicles[0], self.other_actors[0], 100))
 

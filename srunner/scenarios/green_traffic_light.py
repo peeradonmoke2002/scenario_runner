@@ -79,7 +79,7 @@ class PriorityAtJunction(BasicScenario):
         """
         Freeze the traffic lights until the ego has exited the junction
         """
-        root = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="PriorityAtJunctionRoot")
+        root = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="PriorityAtJunctionRoot")
         root.add_child(WaitEndIntersection(self.ego_vehicles[0], self._junction.id))
         root.add_child(TrafficLightFreezer(self._tl_dict))
         return root

@@ -204,11 +204,11 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
         Hero vehicle is entering a junction in an urban area, at a signalized intersection,
         while another actor runs a red lift, forcing the ego to break.
         """
-        sequence = py_trees.composites.Sequence("OppositeVehicleRunningRedLight", True)
+        sequence = py_trees.composites.Sequence("OppositeVehicleRunningRedLight")
 
         # Wait until ego is close to the adversary
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._sync_time, self._collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -220,7 +220,7 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
         start_location = self._spawn_wp.transform.location
         time = start_location.distance(end_location) / self._adversary_speed
 
-        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="Main_OppositeVehicleRunningRedLight")
+        main_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="Main_OppositeVehicleRunningRedLight")
         main_behavior.add_child(ConstantVelocityAgentBehavior(
             self.other_actors[0], target_location=end_location,
             target_speed=self._adversary_speed,
@@ -233,11 +233,11 @@ class OppositeVehicleRunningRedLight(OppositeVehicleJunction):
         sequence.add_child(ActorDestroy(self.other_actors[0]))
         sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]))
 
-        tls_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="Tls_OppositeVehicleRunningRedLight")
+        tls_behavior = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="Tls_OppositeVehicleRunningRedLight")
         tls_behavior.add_child(TrafficLightFreezer(self._tl_dict))
         tls_behavior.add_child(sequence)
 
-        root = py_trees.composites.Sequence("root", True)
+        root = py_trees.composites.Sequence("root")
         if self.route_mode:
             root.add_child(HandleJunctionScenario(
                 clear_junction=True,
@@ -271,11 +271,11 @@ class OppositeVehicleTakingPriority(OppositeVehicleJunction):
         Hero vehicle is entering a junction in an urban area, at a signalized intersection,
         while another actor runs a red lift, forcing the ego to break.
         """
-        sequence = py_trees.composites.Sequence("OppositeVehicleTakingPriority", True)
+        sequence = py_trees.composites.Sequence("OppositeVehicleTakingPriority")
 
         # Wait until ego is close to the adversary
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._sync_time, self._collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -289,7 +289,7 @@ class OppositeVehicleTakingPriority(OppositeVehicleJunction):
 
         main_behavior = py_trees.composites.Parallel(
             name="OppositeVehicleTakingPriorityMain",
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
         main_behavior.add_child(ConstantVelocityAgentBehavior(
             self.other_actors[0], target_location=end_location,
             target_speed=self._adversary_speed,
@@ -300,7 +300,7 @@ class OppositeVehicleTakingPriority(OppositeVehicleJunction):
 
         sequence.add_child(main_behavior)
 
-        root = py_trees.composites.Sequence("root", True)
+        root = py_trees.composites.Sequence("root")
         if self.route_mode:
             root.add_child(HandleJunctionScenario(
                 clear_junction=True,

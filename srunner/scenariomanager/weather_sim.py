@@ -116,9 +116,9 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
         self._weather = None
         self._current_time = None
 
-        self.blackboard = self.attach_blackboard_client(name=name)
-        self.blackboard.register_key(key="CarlaWeather", access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key(key="Datetime", access=py_trees.common.Access.WRITE)
+        self.blackboard = py_trees.blackboard.Blackboard()
+        pass  # register_key removed (py_trees 0.8.x)
+        pass  # register_key removed (py_trees 0.8.x)
 
     def initialise(self):
         """

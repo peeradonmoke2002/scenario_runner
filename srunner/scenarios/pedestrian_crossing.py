@@ -154,7 +154,7 @@ class PedestrianCrossing(BasicScenario):
         the cyclist starts crossing the road once the condition meets,
         then after 60 seconds, a timeout stops the scenario
         """
-        sequence = py_trees.composites.Sequence("PedestrianCrossing", True)
+        sequence = py_trees.composites.Sequence("PedestrianCrossing")
         if self.route_mode:
             sequence.add_child(HandleJunctionScenario(
                 clear_junction=False,
@@ -172,7 +172,7 @@ class PedestrianCrossing(BasicScenario):
 
         # Wait until ego is close to the adversary
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -181,10 +181,10 @@ class PedestrianCrossing(BasicScenario):
 
         # Move the walkers
         main_behavior = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnAll(), name="WalkerMovement")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name="WalkerMovement")
 
         for walker_actor, walker_data in zip(self.other_actors, self._walker_data):
-            walker_sequence = py_trees.composites.Sequence("WalkerCrossing", True)
+            walker_sequence = py_trees.composites.Sequence("WalkerCrossing")
             walker_sequence.add_child(Idle(walker_data['idle_time']))
             walker_sequence.add_child(KeepVelocity(
                 walker_actor, walker_data['speed'], False, walker_data['duration'], walker_data['distance']))
@@ -238,7 +238,7 @@ class PedestrianCrossing(BasicScenario):
             return trigger_tree
 
         parallel = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="ScenarioTrigger")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="ScenarioTrigger")
 
         for i, walker in enumerate(reversed(self.other_actors)):
             parallel.add_child(MovePedestrianWithEgo(self.ego_vehicles[0], walker, 100))

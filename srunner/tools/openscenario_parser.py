@@ -1179,7 +1179,7 @@ class OpenScenarioParser(object):
             raise AttributeError("Unknown condition")
 
         if delay_atomic is not None and atomic is not None:
-            new_atomic = py_trees.composites.Sequence("delayed sequence", True)
+            new_atomic = py_trees.composites.Sequence("delayed sequence")
             new_atomic.add_child(delay_atomic)
             new_atomic.add_child(atomic)
         else:
@@ -1243,7 +1243,7 @@ class OpenScenarioParser(object):
                     OpenScenarioParser.get_friction_from_env_action(global_action, catalogs))
 
                 env_behavior = py_trees.composites.Parallel(
-                    policy=py_trees.common.ParallelPolicy.SuccessOnAll(), name=maneuver_name)
+                    policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL, name=maneuver_name)
 
                 env_behavior.add_child(
                     oneshot_with_check(variable_name=maneuver_name + ">WeatherUpdate", behaviour=weather_behavior))

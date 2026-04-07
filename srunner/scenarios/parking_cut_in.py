@@ -133,7 +133,7 @@ class ParkingCutIn(BasicScenario):
         After invoking this scenario, a parked vehicle will wait for the ego to
         be close-by, merging into its lane, forcing it to break.
         """
-        sequence = py_trees.composites.Sequence("ParkingCutIn", True)
+        sequence = py_trees.composites.Sequence("ParkingCutIn")
         if self.route_mode:
             sequence.add_child(LeaveSpaceInFront(self._cut_in_distance + 10))
 
@@ -141,7 +141,7 @@ class ParkingCutIn(BasicScenario):
 
         # Wait until ego is close to the adversary
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -153,7 +153,7 @@ class ParkingCutIn(BasicScenario):
 
         # Move the adversary
         cut_in = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="Cut in behavior")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="Cut in behavior")
         cut_in.add_child(BasicAgentBehavior(self.other_actors[1], opt_dict={'ignore_traffic_lights': True}))
         cut_in.add_child(DriveDistance(self.other_actors[1], self._end_distance))
         sequence.add_child(cut_in)

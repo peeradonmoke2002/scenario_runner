@@ -267,7 +267,7 @@ class RouteScenario(BasicScenario):
         scenario_trigger_distance = DIST_THRESHOLD  # Max trigger distance between route and scenario
 
         behavior = py_trees.composites.Parallel(name="Route Behavior",
-                                                policy=py_trees.common.ParallelPolicy.SuccessOnAll())
+                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
 
         scenario_behaviors = []
         blackboard_list = []
@@ -295,7 +295,7 @@ class RouteScenario(BasicScenario):
         and adds the scenario specific ones, which will only be active during their scenario
         """
         criteria = py_trees.composites.Parallel(name="Criteria",
-                                                policy=py_trees.common.ParallelPolicy.SuccessOnOne())
+                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
 
         # End condition
         criteria.add_child(RouteCompletionTest(self.ego_vehicles[0], route=self.route))
@@ -363,11 +363,11 @@ class RouteScenario(BasicScenario):
         var_name = scenario.config.route_var_name
         check_name = "WaitForBlackboardVariable: {}".format(var_name)
 
-        criteria_tree = py_trees.composites.Sequence(scenario_name, True)
+        criteria_tree = py_trees.composites.Sequence(scenario_name)
         criteria_tree.add_child(WaitForBlackboardVariable(var_name, True, False, name=check_name))
 
         scenario_criteria = py_trees.composites.Parallel(name=scenario_name,
-                                                policy=py_trees.common.ParallelPolicy.SuccessOnOne())
+                                                policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
         for criterion in criteria:
             scenario_criteria.add_child(criterion)
         scenario_criteria.add_child(WaitForBlackboardVariable(var_name, False, None, name=check_name))

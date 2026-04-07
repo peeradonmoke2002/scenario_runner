@@ -94,7 +94,7 @@ class HighwayCutIn(BasicScenario):
         Hero vehicle is entering a junction in an urban area, at a signalized intersection,
         while another actor runs a red lift, forcing the ego to break.
         """
-        behavior = py_trees.composites.Sequence("HighwayCutIn", True)
+        behavior = py_trees.composites.Sequence("HighwayCutIn")
 
         if self.route_mode:
             behavior.add_child(HandleJunctionScenario(

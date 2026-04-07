@@ -206,7 +206,7 @@ class StaticCutIn(BasicScenario):
         After invoking this scenario, a parked vehicle will wait for the ego to
         be close-by, merging into its lane, forcing it to break.
         """
-        sequence = py_trees.composites.Sequence("StaticCutIn", True)
+        sequence = py_trees.composites.Sequence("StaticCutIn")
         if self.route_mode:
             total_dist = self._blocker_distance
             total_dist += self._vehicle_gap * (self._back_vehicles + self._front_vehicles + 1)
@@ -218,7 +218,7 @@ class StaticCutIn(BasicScenario):
 
         # Wait until ego is close to the adversary
         trigger_adversary = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="TriggerAdversaryStart")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="TriggerAdversaryStart")
         trigger_adversary.add_child(InTimeToArrivalToLocation(
             self.ego_vehicles[0], self._reaction_time, collision_location))
         trigger_adversary.add_child(InTriggerDistanceToLocation(
@@ -232,10 +232,10 @@ class StaticCutIn(BasicScenario):
             sequence.add_child(RemoveRoadLane(self._side_wp))
 
         cut_in_behavior = py_trees.composites.Parallel(
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="CutIn")
+            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="CutIn")
         cut_in_direction = 'right' if self._direction == 'left' else 'left'
 
-        cut_in_movement = py_trees.composites.Sequence("cut_in_movement", True)
+        cut_in_movement = py_trees.composites.Sequence("cut_in_movement")
         cut_in_movement.add_child(CutIn(
             self._adversary_actor, self.ego_vehicles[0], cut_in_direction, change_time=3, other_lane_time=2))
         cut_in_movement.add_child(BasicAgentBehavior(
