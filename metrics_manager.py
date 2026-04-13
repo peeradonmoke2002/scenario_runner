@@ -129,9 +129,7 @@ def main():
     main function
     """
 
-    # pylint: disable=line-too-long
-    description = "Scenario Runner's metrics module. Evaluate the execution of a specific scenario by developing your own metric.\n"
-    # pylint: enable=line-too-long
+    description = ("Scenario Runner's metrics module. Evaluate the execution of a specific scenario by developing your own metric.\n")
 
     parser = argparse.ArgumentParser(description=description,
                                     formatter_class=RawTextHelpFormatter)
@@ -139,23 +137,13 @@ def main():
                         help='IP of the host server (default: localhost)')
     parser.add_argument('--port', '-p', default=2000,
                         help='TCP port to listen to (default: 2000)')
-    parser.add_argument(
-        "--log",
-        required=True,
-        help="Path to the CARLA recorder .log file (relative to SCENARIO_RUNNER_ROOT)."
-             "\nThis file is created by the record functionality at ScenarioRunner",
-    )
-    parser.add_argument(
-        "--metric",
-        required=True,
-        help="Path to the .py file defining the used metric.\nSome examples at srunner/metrics",
-    )
-    parser.add_argument(
-        "--criteria",
-        default="",
-        help="Path to the .json file with the criteria information."
-             "\nThis file is created by the record functionality at ScenarioRunner",
-    )
+    parser.add_argument('--log', required=True,
+                        help='Path to the CARLA recorder .log file (relative to SCENARIO_RUNNER_ROOT).\nThis file is created by the record functionality at ScenarioRunner')
+    parser.add_argument('--metric', required=True,
+                        help='Path to the .py file defining the used metric.\nSome examples at srunner/metrics')
+    parser.add_argument('--criteria', default="",
+                        help='Path to the .json file with the criteria information.\nThis file is created by the record functionality at ScenarioRunner')
+    # pylint: enable=line-too-long
 
     args = parser.parse_args()
 
