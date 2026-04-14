@@ -309,7 +309,7 @@ class BasicScenario(object):
         # Cleanup all instantiated controllers
         actor_dict = {}
         try:
-            actor_dict = py_trees.blackboard.Blackboard().get("ActorsWithController")
+            actor_dict = py_trees.blackboard.Blackboard().get("ActorsWithController") or {}
         except KeyError:
             pass
         for actor_id in actor_dict:

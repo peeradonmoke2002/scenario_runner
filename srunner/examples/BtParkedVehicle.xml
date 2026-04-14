@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<scenarios>
+
+    <!--
+        BtParkedVehicle_1 — Town10HD_Opt
+
+        Ego starts on a straight road heading south (yaw=90).
+        A parked Tesla spawns 25m ahead in the same lane.
+        bt_obstacle should detect it and shift path to avoid.
+    -->
+    <scenario name="BtParkedVehicle_1" type="BtParkedVehicle" town="Town10HD_Opt">
+        <ego_vehicle x="64.82" y="-68.46" z="0.5" yaw="179.25"
+                     model="vehicle.tesla.model3" rolename="ego_vehicle" />
+        <other_parameters>
+            <distance value="25" />
+            <park_side value="right" />
+        </other_parameters>
+        <weather cloudiness="0" precipitation="0" precipitation_deposits="0"
+                 wind_intensity="5" sun_azimuth_angle="45" sun_altitude_angle="60"
+                 fog_density="0" wetness="0" />
+    </scenario>
+
+</scenarios>
