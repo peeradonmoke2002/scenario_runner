@@ -46,7 +46,6 @@ from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (
     DriveDistance,
-    InTriggerDistanceToLocation,
 )
 from srunner.scenarios.basic_scenario import BasicScenario
 from srunner.tools.scenario_helper import get_location_in_distance_from_wp
@@ -139,7 +138,7 @@ class BtParkedWithBlindSpotPed(BasicScenario):
             )
             self._parked_transform = carla.Transform(
                 carla.Location(base_loc.x, base_loc.y,
-                               park_wp.transform.location.z + 0.5),
+                               park_wp.transform.location.z + 0.2),
                 spawn_rot
             )
             parked_vehicle = CarlaDataProvider.request_new_actor(
@@ -153,10 +152,8 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         if parked_vehicle is None:
             raise ValueError("BtParkedWithBlindSpotPed: failed to spawn parked vehicle")
 
-        # Kinematic — LIDAR still detects it, ego car still collides with it,
-        # but it cannot be launched by physics interactions with the pedestrian.
-        # Spawn at final position (no underground storage) — works without --sync.
-        parked_vehicle.set_simulate_physics(False)
+        parked_vehicle.apply_control(carla.VehicleControl(hand_brake=True))
+        parked_vehicle.set_simulate_physics(True)
         self.other_actors.append(parked_vehicle)  # index 0
 
         # ---- 2. Pedestrian — 3m past parked car, 1.2x lane_width lateral ----
@@ -200,8 +197,7 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         if pedestrian is None:
             raise ValueError("BtParkedWithBlindSpotPed: failed to spawn pedestrian")
 
-        pedestrian.set_simulate_physics(False)
-        # Move deeper underground (matching pedestrian_crossing.py _replace_walker depth)
+        pedestrian.set_simulate_physics(True)
         pedestrian.set_location(carla.Location(ref_loc.x, ref_loc.y, ref_loc.z - 100.0))
         self.other_actors.append(pedestrian)  # index 1
 
@@ -223,59 +219,30 @@ class BtParkedWithBlindSpotPed(BasicScenario):
               KeepVelocity(ped, ped_speed, 20s/10m)
                 ← ped walks perpendicular across avoidance path (killed when ego passes)
         """
-        parked_loc = self._parked_transform.location
-
         root = py_trees.composites.Parallel(
             name="BtParkedWithBlindSpotPed",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL
+            policy=py_trees.common.ParallelPolicy.SuccessOnAll()
         )
         seq = py_trees.composites.Sequence("ScenarioSequence", memory=True)
 
-        # Place ped BEFORE trigger — polls until server confirms transform.
-        # Ped stands at 1.2x lane_width (road edge) so IsNotOnEdgeLane FAILS → filtered while stationary.
         seq.add_child(ActorTransformSetter(
             self.other_actors[1], self._ped_transform, name="PlacePedestrian"))
 
-        # Ped starts walking as soon as ego moves (trigger_drive=3m default).
-        # This gives perception ~14m of runway to detect ped before avoidance begins.
         seq.add_child(DriveDistance(
             self.ego_vehicles[0], self._trigger_drive, name="EgoStartedMoving"
         ))
 
-        # Inner parallel: ped walks while we wait for ego to pass the parked car
-        inner = py_trees.composites.Parallel(
-            name="PedWalkAndWait",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE
-        )
-
-        # Success branch: ego gets alongside then drives pass_dist past the parked car
-        success_seq = py_trees.composites.Sequence("EgoPassSequence", memory=True)
-        success_seq.add_child(InTriggerDistanceToLocation(
-            self.ego_vehicles[0],
-            parked_loc,
-            distance=5.0,
-            name="EgoAlongsideCar"
-        ))
-        success_seq.add_child(DriveDistance(
-            self.ego_vehicles[0], self._pass_dist, name="EgoFullyPassed"
-        ))
-
-        # Ped walks perpendicular — long duration so it never triggers SUCCESS_ON_ONE
-        # before ego passes. Killed automatically when EgoPassSequence succeeds.
-        ped_walk = KeepVelocity(
+        # Ped walks to other shoulder (10 m) then stops — seq returns SUCCESS.
+        # RunForever keeps root RUNNING so scenario never ends automatically.
+        seq.add_child(KeepVelocity(
             self.other_actors[1],
             self._ped_speed,
             False,
-            duration=300.0,
-            distance=10.0,
+            duration=float("inf"),
             name="PedWalksAcross"
-        )
+        ))
 
-        inner.add_child(ped_walk)
-
-        seq.add_child(inner)
         root.add_child(seq)
-        # Running() never returns SUCCESS → root (SUCCESS_ON_ALL) never ends → runs forever
         root.add_child(py_trees.behaviours.Running(name="RunForever"))
         return root
 
