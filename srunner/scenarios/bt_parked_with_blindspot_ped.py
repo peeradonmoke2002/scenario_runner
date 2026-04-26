@@ -159,8 +159,13 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         collision_location = self._collision_wp.transform.location
 
+        # trigger_dist is measured from the FRONT of ego, not center.
+        # InTriggerDistanceToLocation measures from ego center, so add ego half-length.
+        ego_half_len = self.ego_vehicles[0].bounding_box.extent.x
+        trigger_from_center = self._trigger_dist + ego_half_len
+
         sequence.add_child(InTriggerDistanceToLocation(
-            self.ego_vehicles[0], collision_location, self._trigger_dist,
+            self.ego_vehicles[0], collision_location, trigger_from_center,
             name="TriggerAdversaryStart"))
 
         if self.route_mode:
