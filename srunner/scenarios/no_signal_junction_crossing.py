@@ -121,14 +121,14 @@ class NoSignalJunctionCrossing(BasicScenario):
         )
 
         # Creating non-leaf nodes
-        root = py_trees.composites.Sequence("root")
-        scenario_sequence = py_trees.composites.Sequence("scenario_sequence")
+        root = py_trees.composites.Sequence("root", memory=True)
+        scenario_sequence = py_trees.composites.Sequence("scenario_sequence", memory=True)
         sync_arrival_parallel = py_trees.composites.Parallel(
             name="NoSignalJunctionCrossingSyncArrival",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         keep_velocity_other_parallel = py_trees.composites.Parallel(
             name="NoSignalJunctionCrossingKeepVelocity",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         # Building tree
         root.add_child(scenario_sequence)
@@ -195,7 +195,7 @@ class NoSignalJunctionCrossingRoute(BasicScenario):
         """
         Just wait for the ego to exit the junction, for route the BackgroundActivity already does all the job
         """
-        sequence = py_trees.composites.Sequence("UnSignalizedJunctionCrossingRoute")
+        sequence = py_trees.composites.Sequence("UnSignalizedJunctionCrossingRoute", memory=True)
         sequence.add_child(WaitEndIntersection(self.ego_vehicles[0]), True)
         sequence.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         return sequence

@@ -71,10 +71,10 @@ class BasicScenario(object):
             world.wait_for_tick()
 
         # Main scenario tree
-        self.scenario_tree = py_trees.composites.Parallel(name, policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        self.scenario_tree = py_trees.composites.Parallel(name, policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
         # Add a trigger and end condition to the behavior to ensure it is only activated when it is relevant
-        self.behavior_tree = py_trees.composites.Sequence('Sequence') # default values from: https://py-trees.readthedocs.io/_/downloads/en/release-2.1.x/pdf/
+        self.behavior_tree = py_trees.composites.Sequence('Sequence', memory=True) # default values from: https://py-trees.readthedocs.io/_/downloads/en/release-2.1.x/pdf/
 
         trigger_behavior = self._setup_scenario_trigger(config)
         if trigger_behavior:
@@ -116,7 +116,7 @@ class BasicScenario(object):
                     criterion.terminate_on_failure = terminate_on_failure
 
                 self.criteria_tree = py_trees.composites.Parallel(name="Test Criteria",
-                                                                  policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ALL)
+                                                                  policy=py_trees.common.ParallelPolicy.SuccessOnAll())
                 self.criteria_tree.add_children(criteria)
                 self.criteria_tree.setup(timeout=1)
 
@@ -202,7 +202,7 @@ class BasicScenario(object):
             return None
 
         # Scenario is part of a route.
-        end_sequence = py_trees.composites.Sequence("end_sequence")
+        end_sequence = py_trees.composites.Sequence("end_sequence", memory=True)
         name = "Reset Blackboard Variable: {} ".format(config.route_var_name)
         end_sequence.add_child(py_trees.behaviours.SetBlackboardVariable(name, config.route_var_name, False, overwrite=True))
         end_sequence.add_child(WaitForever())  # scenario can't stop the route
@@ -309,13 +309,13 @@ class BasicScenario(object):
         # Cleanup all instantiated controllers
         actor_dict = {}
         try:
-            actor_dict = py_trees.blackboard.Blackboard().get("ActorsWithController") or {}
+            actor_dict = py_trees.blackboard.Blackboard.get("ActorsWithController") or {}
         except KeyError:
             pass
         for actor_id in actor_dict:
             actor_dict[actor_id].reset()
-        #py_trees.blackboard.Blackboard().unset("ActorsWithController")
-        py_trees.blackboard.Blackboard().set("ActorsWithController", {})
+        #py_trees.blackboard.Blackboard.unset("ActorsWithController")
+        py_trees.blackboard.Blackboard.set("ActorsWithController", {})
 
     def remove_all_actors(self):
         """

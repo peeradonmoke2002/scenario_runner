@@ -82,7 +82,11 @@ class MetricsLog(object):  # pylint: disable=too-many-public-methods
         """
         Returns the id of the ego vehicle.
         """
-        return self.get_actor_ids_with_role_name("hero")[0]
+        for role in ("hero", "ego_vehicle"):
+            ids = self.get_actor_ids_with_role_name(role)
+            if ids:
+                return ids[0]
+        raise ValueError("No ego vehicle found with role 'hero' or 'ego_vehicle' in the recording")
 
     def get_actor_ids_with_role_name(self, role_name):
         """

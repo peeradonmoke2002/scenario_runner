@@ -188,18 +188,18 @@ class ParkingExit(BasicScenario):
         After ego drives away, activate OutsideRouteLanesTest, end scenario.
         """
 
-        sequence = py_trees.composites.Sequence("ParkingExit")
+        sequence = py_trees.composites.Sequence("ParkingExit", memory=True)
         sequence.add_child(ChangeRoadBehavior(spawn_dist=self._flow_distance))
-        root = py_trees.composites.Parallel(name="RootParkingExit", policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        root = py_trees.composites.Parallel(name="RootParkingExit", policy=py_trees.common.ParallelPolicy.SuccessOnOne())
 
-        side_actor_behavior = py_trees.composites.Sequence("side_actor_behavior")
+        side_actor_behavior = py_trees.composites.Sequence("side_actor_behavior", memory=True)
         side_actor_behavior.add_child(ChangeAutoPilot(self.other_actors[2], True))
         side_actor_behavior.add_child(DriveDistance(self.other_actors[2], self._side_end_distance))
         side_actor_behavior.add_child(ActorTransformSetter(self.other_actors[2], self._end_side_transform, False))
         side_actor_behavior.add_child(WaitForever())
         root.add_child(side_actor_behavior)
 
-        end_condition = py_trees.composites.Parallel(name="ParkingExitEnd", policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE)
+        end_condition = py_trees.composites.Parallel(name="ParkingExitEnd", policy=py_trees.common.ParallelPolicy.SuccessOnOne())
         end_condition.add_child(DriveDistance(self.ego_vehicles[0], self._end_distance))
         end_condition.add_child(ScenarioTimeout(self._scenario_timeout, self.config.name))
         root.add_child(end_condition)

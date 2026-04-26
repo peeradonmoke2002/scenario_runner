@@ -57,7 +57,7 @@ class AtomicCondition(py_trees.behaviour.Behaviour):
         self.logger.debug("%s.__init__()" % (self.__class__.__name__))
         self.name = name
 
-        self.blackboard = py_trees.blackboard.Blackboard()
+        self.blackboard = py_trees.blackboard.Blackboard
 
     def setup(self, unused_timeout=15):
         """
@@ -527,9 +527,8 @@ class TimeOfDayComparison(AtomicCondition):
         new_status = py_trees.common.Status.RUNNING
 
         try:
-            check_dtime = operator.attrgetter("Datetime")
-            dtime = check_dtime(self.blackboard)
-        except AttributeError:
+            dtime = self.blackboard.get("Datetime")
+        except KeyError:
             pass
 
         if self._comparison_operator(dtime, self._datetime):
@@ -568,7 +567,7 @@ class OSCStartEndCondition(AtomicCondition):
         pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists(blackboard_variable_name):
-            self.blackboard.set(blackboard_variable_name, None, True)
+            self.blackboard.set(blackboard_variable_name, None)
 
     def initialise(self):
         """

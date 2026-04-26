@@ -68,7 +68,7 @@ class Criterion(py_trees.behaviour.Behaviour):
 
         self.events = []  # List of events (i.e collision, sidewalk invasion...)
 
-        self.blackboard = py_trees.blackboard.Blackboard()
+        self.blackboard = py_trees.blackboard.Blackboard
 
     def initialise(self):
         """
@@ -442,7 +442,7 @@ class ActorBlockedTest(Criterion):
         pass  # register_key removed (py_trees 0.8.x)
         
         if not self.blackboard.exists('AC_SwitchActorBlockedTest'):
-            self.blackboard.set('AC_SwitchActorBlockedTest', None, True)
+            self.blackboard.set('AC_SwitchActorBlockedTest', None)
 
     def update(self):
         """
@@ -455,7 +455,7 @@ class ActorBlockedTest(Criterion):
         if active is not None:
             self._active = active
             self._time_last_valid_state = GameTime.get_time()
-            self.blackboard.set("AC_SwitchActorBlockedTest", None, overwrite=True)
+            self.blackboard.set("AC_SwitchActorBlockedTest", None)
 
         if self._active:
             linear_speed = CarlaDataProvider.get_velocity(self.actor)
@@ -1033,7 +1033,7 @@ class OutsideRouteLanesTest(Criterion):
         pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists('AC_SwitchWrongDirectionTest'):
-            self.blackboard.set('AC_SwitchWrongDirectionTest', None, True)
+            self.blackboard.set('AC_SwitchWrongDirectionTest', None)
 
     def update(self):
         """
@@ -1055,7 +1055,7 @@ class OutsideRouteLanesTest(Criterion):
         active = self.blackboard.get('AC_SwitchWrongDirectionTest')
         if active is not None:
             self._wrong_direction_active = active
-            self.blackboard.set("AC_SwitchWrongDirectionTest", None, overwrite=True)
+            self.blackboard.set("AC_SwitchWrongDirectionTest", None)
 
         self._is_outside_driving_lanes(location)
         self._is_at_wrong_lane(location)
@@ -2189,7 +2189,7 @@ class ScenarioTimeoutTest(Criterion):
         pass  # register_key removed (py_trees 0.8.x)
 
         if not self.blackboard.exists(f"ScenarioTimeout_{self._scenario_name}"):
-            self.blackboard.set(f"ScenarioTimeout_{self._scenario_name}", None, True)
+            self.blackboard.set(f"ScenarioTimeout_{self._scenario_name}", None)
 
     def update(self):
         """wait"""
@@ -2210,6 +2210,6 @@ class ScenarioTimeoutTest(Criterion):
             traffic_event = TrafficEvent(event_type=TrafficEventType.SCENARIO_TIMEOUT, frame=GameTime.get_frame())
             traffic_event.set_message("Agent timed out a scenario")
             self.events.append(traffic_event)
-        self.blackboard.set(blackboard_name, None, True)
+        self.blackboard.set(blackboard_name, None)
 
         super().terminate(new_status)

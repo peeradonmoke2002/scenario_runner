@@ -259,49 +259,36 @@ class BackgroundBehavior(AtomicBehavior):
         self._scenario_removed_lane = False  # Flag indicating a scenario has removed a lane
         self._scenario_remove_lane_offset = 0
 
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
+        self.blackboard = py_trees.blackboard.Blackboard
 
         if not self.blackboard.exists('BA_ChangeRoadBehavior'):
-            self.blackboard.set('BA_ChangeRoadBehavior', None, True)
+            self.blackboard.set('BA_ChangeRoadBehavior', None)
         if not self.blackboard.exists('BA_ChangeOppositeBehavior'):
-            self.blackboard.set('BA_ChangeOppositeBehavior', None, True)
+            self.blackboard.set('BA_ChangeOppositeBehavior', None)
         if not self.blackboard.exists('BA_ChangeJunctionBehavior'):
-            self.blackboard.set('BA_ChangeJunctionBehavior', None, True)
+            self.blackboard.set('BA_ChangeJunctionBehavior', None)
         if not self.blackboard.exists('BA_SetMaxSpeed'):
-            self.blackboard.set('BA_SetMaxSpeed', None, True)
+            self.blackboard.set('BA_SetMaxSpeed', None)
         if not self.blackboard.exists('BA_StopFrontVehicles'):
-            self.blackboard.set('BA_StopFrontVehicles', None, True)
+            self.blackboard.set('BA_StopFrontVehicles', None)
         if not self.blackboard.exists('BA_StartFrontVehicles'):
-            self.blackboard.set('BA_StartFrontVehicles', None, True)
+            self.blackboard.set('BA_StartFrontVehicles', None)
         if not self.blackboard.exists('BA_StopBackVehicles'):
-            self.blackboard.set('BA_StopBackVehicles', None, True)
+            self.blackboard.set('BA_StopBackVehicles', None)
         if not self.blackboard.exists('BA_StartBackVehicles'):
-            self.blackboard.set('BA_StartBackVehicles', None, True)
+            self.blackboard.set('BA_StartBackVehicles', None)
         if not self.blackboard.exists('BA_LeaveSpaceInFront'):
-            self.blackboard.set('BA_LeaveSpaceInFront', None, True)
+            self.blackboard.set('BA_LeaveSpaceInFront', None)
         if not self.blackboard.exists('BA_LeaveCrossingSpace'):
-            self.blackboard.set('BA_LeaveCrossingSpace', None, True)
+            self.blackboard.set('BA_LeaveCrossingSpace', None)
         if not self.blackboard.exists('BA_RemoveRoadLane'):
-            self.blackboard.set('BA_RemoveRoadLane', None, True)
+            self.blackboard.set('BA_RemoveRoadLane', None)
         if not self.blackboard.exists('BA_ReAddRoadLane'):
-            self.blackboard.set('BA_ReAddRoadLane', None, True)
+            self.blackboard.set('BA_ReAddRoadLane', None)
         if not self.blackboard.exists('BA_HandleJunctionScenario'):
-            self.blackboard.set('BA_HandleJunctionScenario', None, True)
+            self.blackboard.set('BA_HandleJunctionScenario', None)
         if not self.blackboard.exists('BA_SwitchRouteSources'):
-            self.blackboard.set('BA_SwitchRouteSources', None, True)
+            self.blackboard.set('BA_SwitchRouteSources', None)
 
 
     def _get_route_data(self, route):
@@ -1670,7 +1657,7 @@ class BackgroundBehavior(AtomicBehavior):
             if extra_space is not None:
                 self._road_extra_space = extra_space
             self._get_road_radius()
-            self.blackboard.set('BA_ChangeRoadBehavior', None, True)
+            self.blackboard.set('BA_ChangeRoadBehavior', None)
 
         # Opposite behavior
         opposite_behavior_data = self.blackboard.get('BA_ChangeOppositeBehavior')
@@ -1688,7 +1675,7 @@ class BackgroundBehavior(AtomicBehavior):
                 self._active_opposite_sources = active
                 for source in self._opposite_sources:
                     source.active = active
-            self.blackboard.set('BA_ChangeOppositeBehavior', None, True)
+            self.blackboard.set('BA_ChangeOppositeBehavior', None)
 
         # Junction behavior
         junction_behavior_data = self.blackboard.get('BA_ChangeJunctionBehavior')
@@ -1705,73 +1692,73 @@ class BackgroundBehavior(AtomicBehavior):
                 self._junction_sources_max_actors = max_actors
             if source_perc is not None:
                 self._junction_source_perc = source_perc
-            self.blackboard.set('BA_ChangeJunctionBehavior', None, True)
+            self.blackboard.set('BA_ChangeJunctionBehavior', None)
 
         # Max speed
         max_speed = self.blackboard.get('BA_SetMaxSpeed')
         if max_speed is not None:
             self._scenario_max_speed = max_speed
-            self.blackboard.set('BA_SetMaxSpeed', None, True)
+            self.blackboard.set('BA_SetMaxSpeed', None)
 
         # Stop front vehicles
         stop_data = self.blackboard.get('BA_StopFrontVehicles')
         if stop_data is not None:
             self._stop_road_front_vehicles()
-            self.blackboard.set('BA_StopFrontVehicles', None, True)
+            self.blackboard.set('BA_StopFrontVehicles', None)
 
         # Start front vehicles
         start_data = self.blackboard.get('BA_StartFrontVehicles')
         if start_data is not None:
             self._start_road_front_vehicles()
-            self.blackboard.set("BA_StartFrontVehicles", None, True)
+            self.blackboard.set("BA_StartFrontVehicles", None)
 
         # Stop back vehicles
         stop_back_data = self.blackboard.get('BA_StopBackVehicles')
         if stop_back_data is not None:
             self._stop_road_back_vehicles()
-            self.blackboard.set('BA_StopBackVehicles', None, True)
+            self.blackboard.set('BA_StopBackVehicles', None)
 
         # Start back vehicles
         start_back_data = self.blackboard.get('BA_StartBackVehicles')
         if start_back_data is not None:
             self._start_road_back_vehicles()
-            self.blackboard.set("BA_StartBackVehicles", None, True)
+            self.blackboard.set("BA_StartBackVehicles", None)
 
         # Leave space in front
         leave_space_data = self.blackboard.get('BA_LeaveSpaceInFront')
         if leave_space_data is not None:
             self._leave_space_in_front(leave_space_data)
-            self.blackboard.set('BA_LeaveSpaceInFront', None, True)
+            self.blackboard.set('BA_LeaveSpaceInFront', None)
 
         # Leave crosssing space
         leave_crossing_space_data = self.blackboard.get('BA_LeaveCrossingSpace')
         if leave_crossing_space_data is not None:
             self._leave_crossing_space(leave_crossing_space_data)
-            self.blackboard.set('BA_LeaveCrossingSpace', None, True)
+            self.blackboard.set('BA_LeaveCrossingSpace', None)
 
         # Remove road lane
         remove_road_lane_data = self.blackboard.get('BA_RemoveRoadLane')
         if remove_road_lane_data is not None:
             self._remove_road_lane(remove_road_lane_data)
-            self.blackboard.set('BA_RemoveRoadLane', None, True)
+            self.blackboard.set('BA_RemoveRoadLane', None)
 
         # Readd road lane
         readd_road_lane_data = self.blackboard.get('BA_ReAddRoadLane')
         if readd_road_lane_data is not None:
             self._readd_road_lane(readd_road_lane_data)
-            self.blackboard.set('BA_ReAddRoadLane', None, True)
+            self.blackboard.set('BA_ReAddRoadLane', None)
 
         # Adapt the BA to the junction scenario
         junction_scenario_data = self.blackboard.get('BA_HandleJunctionScenario')
         if junction_scenario_data is not None:
             self._handle_junction_scenario(junction_scenario_data)
-            self.blackboard.set("BA_HandleJunctionScenario", None, True)
+            self.blackboard.set("BA_HandleJunctionScenario", None)
 
         # Switch route sources
         switch_sources_data = self.blackboard.get('BA_SwitchRouteSources')
         if switch_sources_data is not None:
             self._switch_route_sources(switch_sources_data)
-            self.blackboard.set("BA_SwitchRouteSources", None, True)
+            self.blackboard.set("BA_SwitchRouteSources", None)
 
         self._compute_parameters()
 

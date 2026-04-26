@@ -44,7 +44,7 @@ class FreeRide(BasicScenario):
     def _create_behavior(self):
         """
         """
-        sequence = py_trees.composites.Sequence("Sequence Behavior")
+        sequence = py_trees.composites.Sequence("Sequence Behavior", memory=True)
         sequence.add_child(Idle())
         return sequence
 

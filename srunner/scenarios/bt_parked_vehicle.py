@@ -138,9 +138,9 @@ class BtParkedVehicle(BasicScenario):
 
         root = py_trees.composites.Parallel(
             name="BtParkedVehicle",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne()
         )
-        sequence = py_trees.composites.Sequence("ScenarioSequence")
+        sequence = py_trees.composites.Sequence("ScenarioSequence", memory=True)
 
         # 1. Place parked car — stays for the whole scenario
         sequence.add_child(

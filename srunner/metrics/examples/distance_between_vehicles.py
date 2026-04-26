@@ -47,12 +47,18 @@ class DistanceBetweenVehicles(BasicMetric):
         # Get the distance between the two
         for i in range(start, end):
 
-            # Get the transforms
-            ego_location = log.get_actor_transform(ego_id, i).location
-            adv_location = log.get_actor_transform(adv_id, i).location
+            ego_t = log.get_actor_transform(ego_id, i)
+            adv_t = log.get_actor_transform(adv_id, i)
 
-            # Filter some points for a better graph
-            if adv_location.z < -10:
+            # Skip frames where either actor has no recorded transform
+            if ego_t is None or adv_t is None:
+                continue
+
+            ego_location = ego_t.location
+            adv_location = adv_t.location
+
+            # Filter frames where actor is underground (hidden before/after scenario)
+            if adv_location.z < -10 or ego_location.z < -10:
                 continue
 
             dist_v = ego_location - adv_location

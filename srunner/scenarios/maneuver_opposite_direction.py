@@ -55,7 +55,8 @@ class ManeuverOppositeDirection(BasicScenario):
         self._source_transform = None
         self._sink_location = None
         self._blackboard_queue_name = 'ManeuverOppositeDirection/actor_flow_queue'
-        self._queue = py_trees.blackboard.Blackboard().set(self._blackboard_queue_name, Queue())
+        py_trees.blackboard.Blackboard.set(self._blackboard_queue_name, Queue())
+        self._queue = py_trees.blackboard.Blackboard.get(self._blackboard_queue_name)
         self._obstacle_type = obstacle_type
         self._first_actor_transform = None
         self._second_actor_transform = None
@@ -134,7 +135,7 @@ class ManeuverOppositeDirection(BasicScenario):
             blackboard_queue_name=self._blackboard_queue_name, avoid_collision=True)
 
         # Non-leaf nodes
-        parallel_root = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE, name="ManeuverOppositeDirectionRoot")
+        parallel_root = py_trees.composites.Parallel(policy=py_trees.common.ParallelPolicy.SuccessOnOne(), name="ManeuverOppositeDirectionRoot")
 
         # Building tree
         parallel_root.add_child(ego_drive_distance)
@@ -142,7 +143,7 @@ class ManeuverOppositeDirection(BasicScenario):
         parallel_root.add_child(actor_sink)
         parallel_root.add_child(waypoint_follower)
 
-        scenario_sequence = py_trees.composites.Sequence("scenario_sequence")
+        scenario_sequence = py_trees.composites.Sequence("scenario_sequence", memory=True)
         scenario_sequence.add_child(ActorTransformSetter(self.other_actors[0], self._first_actor_transform))
         scenario_sequence.add_child(ActorTransformSetter(self.other_actors[1], self._second_actor_transform))
         scenario_sequence.add_child(ActorTransformSetter(self.other_actors[2], self._third_actor_transform))

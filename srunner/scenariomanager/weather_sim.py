@@ -116,9 +116,7 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
         self._weather = None
         self._current_time = None
 
-        self.blackboard = py_trees.blackboard.Blackboard()
-        pass  # register_key removed (py_trees 0.8.x)
-        pass  # register_key removed (py_trees 0.8.x)
+        self.blackboard = py_trees.blackboard.Blackboard
 
     def initialise(self):
         """
@@ -145,16 +143,15 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
         weather = None
 
         try:
-            check_weather = operator.attrgetter("CarlaWeather")
-            weather = check_weather(self.blackboard)
-        except AttributeError:
+            weather = self.blackboard.get("CarlaWeather")
+        except KeyError:
             pass
 
         if weather:
             self._weather = weather
-            delattr(self.blackboard, "CarlaWeather")
+            self.blackboard.unset("CarlaWeather")
             CarlaDataProvider.get_world().set_weather(self._weather.carla_weather)
-            self.blackboard.set("Datetime", self._weather.datetime, overwrite=True)
+            self.blackboard.set("Datetime", self._weather.datetime)
 
         if self._weather and self._weather.animation:
             new_time = GameTime.get_time()
@@ -165,7 +162,7 @@ class OSCWeatherBehavior(py_trees.behaviour.Behaviour):
                 self._current_time = new_time
                 CarlaDataProvider.get_world().set_weather(self._weather.carla_weather)
 
-                self.blackboard.set("Datetime", self._weather.datetime, overwrite=True)
+                self.blackboard.set("Datetime", self._weather.datetime)
 
         return py_trees.common.Status.RUNNING
 

@@ -195,7 +195,7 @@ class BtAvoidWithOncoming(BasicScenario):
 
         root = py_trees.composites.Parallel(
             name="BtAvoidWithOncoming",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne()
         )
         seq = py_trees.composites.Sequence("ScenarioSequence", memory=True)
 
@@ -214,7 +214,7 @@ class BtAvoidWithOncoming(BasicScenario):
         # Inner parallel: oncoming drives while we wait for ego to pass
         inner = py_trees.composites.Parallel(
             name="OncomingAndWait",
-            policy=py_trees.common.ParallelPolicy.SUCCESS_ON_ONE
+            policy=py_trees.common.ParallelPolicy.SuccessOnOne()
         )
 
         # Success branch: ego gets alongside then drives past
