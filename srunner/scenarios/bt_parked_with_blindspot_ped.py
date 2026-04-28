@@ -40,16 +40,17 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         self._park_side        = get_value_parameter(config, 'park_side',         str,   'right')
         if self._park_side not in ('left', 'right'):
             raise ValueError(f"'park_side' must be either 'right' or 'left' but '{self._park_side}' was given")
-        self._yaw_offset       = get_value_parameter(config, 'yaw_offset',        float, -15.0)
-        self._adversary_speed  = get_value_parameter(config, 'adversary_speed',    float, 1.2)
+        self._yaw_offset       = get_value_parameter(config, 'yaw_offset',        float, 0.0)
+        self._adversary_speed  = get_value_parameter(config, 'adversary_speed',    float, 2.0)
 
-        self._trigger_dist = get_value_parameter(config, 'trigger_dist', float, 6.0)
+        self._trigger_dist = get_value_parameter(config, 'trigger_dist', float, 15.0)
 
         self._bp_attributes    = {'base_type': 'car', 'generation': 2}
 
-        self._parked_transform = None
-        self._ped_transform    = None
-        self._collision_wp     = None
+        self._parked_transform  = None
+        self._ped_transform     = None
+        self._collision_wp      = None
+        self._parked_car_half_len = None   # actual bounding box, set in _initialize_actors
 
         super(BtParkedWithBlindSpotPed, self).__init__(
             "BtParkedWithBlindSpotPed",
@@ -103,8 +104,13 @@ class BtParkedWithBlindSpotPed(BasicScenario):
     def _initialize_actors(self, _config):
 
         # ---- 1. Parked car ----
+        # parked_dist = ego front → parked car REAR.
+        # Parked car center = ego_half_len + parked_dist + parked_car_half_len.
+        # We don't have the actual bbox yet, so use 2.5 m as the placement estimate.
+        ego_half_len = self.ego_vehicles[0].bounding_box.extent.x
+        _place_half_len_est = 2.5
         park_location, _ = get_location_in_distance_from_wp(
-            self._reference_waypoint, self._parked_dist)
+            self._reference_waypoint, self._parked_dist + ego_half_len + _place_half_len_est)
         park_wp = self._wmap.get_waypoint(park_location)
 
         self._parked_transform = self._get_blocker_transform(park_wp)
@@ -123,6 +129,7 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         parked_vehicle.apply_control(carla.VehicleControl(hand_brake=True))
         parked_vehicle.set_simulate_physics(True)
+        self._parked_car_half_len = parked_vehicle.bounding_box.extent.x
         self.other_actors.append(parked_vehicle)  # index 0
 
         # ---- 2. Pedestrian — positioned using actual bounding box of parked car ----
@@ -150,8 +157,13 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         sequence = py_trees.composites.Sequence("BtParkedWithBlindSpotPed", memory=True)
 
+        # parked_dist = ego front → parked car REAR
+        # trigger_dist = ego front → parked car REAR at trigger time
+        ego_half_len = self.ego_vehicles[0].bounding_box.extent.x
+        pchl = self._parked_car_half_len  # actual parked car half-length from bbox
+
         if self.route_mode:
-            total_dist = self._parked_dist + 15
+            total_dist = self._parked_dist + ego_half_len + 2 * pchl + 15
             sequence.add_child(LeaveSpaceInFront(total_dist))
 
         sequence.add_child(ActorTransformSetter(
@@ -159,10 +171,9 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         collision_location = self._collision_wp.transform.location
 
-        # trigger_dist is measured from the FRONT of ego, not center.
-        # InTriggerDistanceToLocation measures from ego center, so add ego half-length.
-        ego_half_len = self.ego_vehicles[0].bounding_box.extent.x
-        trigger_from_center = self._trigger_dist + ego_half_len
+        # trigger fires when ego front is trigger_dist from parked car rear
+        # → radius from collision_x to ego center = trigger_dist + ego_half_len + 2*pchl + 0.5
+        trigger_from_center = self._trigger_dist + ego_half_len + 2 * pchl + 0.5
 
         sequence.add_child(InTriggerDistanceToLocation(
             self.ego_vehicles[0], collision_location, trigger_from_center,
@@ -186,7 +197,7 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         # Disable physics on parked car so ego can pass without collision/sensor crash
         sequence.add_child(ActorTransformSetter(
             self.other_actors[0], self._parked_transform, physics=False, name="DisableParkedCarPhysics"))
-        sequence.add_child(DriveDistance(self.ego_vehicles[0], self._parked_dist + 10, name="EndCondition"))
+        sequence.add_child(DriveDistance(self.ego_vehicles[0], self._parked_dist + ego_half_len + 2 * pchl + 10, name="EndCondition"))
         sequence.add_child(ActorDestroy(self.other_actors[0], name="DestroyParkedCar"))
 
         return sequence
