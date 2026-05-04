@@ -13,8 +13,28 @@ from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (
 from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTest
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (
     DriveDistance,
-    InTriggerDistanceToLocation,
 )
+
+
+class InLaneTriggerDistance(py_trees.behaviour.Behaviour):
+    """
+    Trigger when ego's lane-projected distance to a target drops below threshold.
+    Projects ego onto the nearest lane waypoint before measuring distance,
+    eliminating lateral variation caused by avoidance shifts.
+    """
+    def __init__(self, ego, target_location, distance, wmap, name="InLaneTriggerDistance"):
+        super().__init__(name)
+        self._ego = ego
+        self._target_location = target_location
+        self._distance = distance
+        self._wmap = wmap
+
+    def update(self):
+        ego_wp = self._wmap.get_waypoint(self._ego.get_location())
+        road_dist = ego_wp.transform.location.distance(self._target_location)
+        if road_dist <= self._distance:
+            return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.RUNNING
 from srunner.scenarios.basic_scenario import BasicScenario
 from srunner.tools.background_manager import LeaveSpaceInFront, LeaveCrossingSpace
 from srunner.tools.scenario_helper import get_location_in_distance_from_wp
@@ -175,9 +195,9 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         # → radius from collision_x to ego center = trigger_dist + ego_half_len + 2*pchl + 0.5
         trigger_from_center = self._trigger_dist + ego_half_len + 2 * pchl + 0.5
 
-        sequence.add_child(InTriggerDistanceToLocation(
+        sequence.add_child(InLaneTriggerDistance(
             self.ego_vehicles[0], collision_location, trigger_from_center,
-            name="TriggerAdversaryStart"))
+            self._wmap, name="TriggerAdversaryStart"))
 
         if self.route_mode:
             sequence.add_child(LeaveCrossingSpace(self._collision_wp))
