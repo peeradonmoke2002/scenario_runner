@@ -37,13 +37,29 @@ class InLaneTriggerDistance(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.RUNNING
 from srunner.scenarios.basic_scenario import BasicScenario
 from srunner.tools.background_manager import LeaveSpaceInFront, LeaveCrossingSpace
-from srunner.tools.scenario_helper import get_location_in_distance_from_wp
 
 
 def get_value_parameter(config, name, p_type, default):
     if name in config.other_parameters:
         return p_type(config.other_parameters[name]['value'])
     return default
+
+
+def get_location_on_same_road(start_wp, distance, step=1.0):
+    """Follow waypoints up to distance but stop if road_id changes (junction crossed)."""
+    traveled = 0
+    wp = start_wp
+    while traveled < distance:
+        nexts = wp.next(step)
+        if not nexts:
+            break
+        wp_new = nexts[0]  # always take straight-ahead (first option)
+        if wp_new.road_id != start_wp.road_id:
+            print(f"[DEBUG] road_id changed {start_wp.road_id}→{wp_new.road_id} at traveled={traveled:.1f}m, stopping")
+            break
+        traveled += wp_new.transform.location.distance(wp.transform.location)
+        wp = wp_new
+    return wp.transform.location, traveled
 
 
 class BtParkedWithBlindSpotPed(BasicScenario):
@@ -65,7 +81,7 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         self._trigger_dist = get_value_parameter(config, 'trigger_dist', float, 15.0)
 
-        self._bp_attributes    = {'base_type': 'car', 'generation': 2}
+        self._bp_attributes    = {}
 
         self._parked_transform  = None
         self._ped_transform     = None
@@ -124,26 +140,18 @@ class BtParkedWithBlindSpotPed(BasicScenario):
     def _initialize_actors(self, _config):
 
         # ---- 1. Parked car ----
-        # parked_dist = ego front → parked car REAR.
-        # Parked car center = ego_half_len + parked_dist + parked_car_half_len.
-        # We don't have the actual bbox yet, so use 2.5 m as the placement estimate.
-        ego_half_len = self.ego_vehicles[0].bounding_box.extent.x
-        _place_half_len_est = 2.5
-        park_location, _ = get_location_in_distance_from_wp(
-            self._reference_waypoint, self._parked_dist + ego_half_len + _place_half_len_est)
+        park_location, _ = get_location_on_same_road(
+            self._reference_waypoint, self._parked_dist)
         park_wp = self._wmap.get_waypoint(park_location)
-
         self._parked_transform = self._get_blocker_transform(park_wp)
         self.parking_slots.append(self._parked_transform.location)
 
-        parked_vehicle = None
-        for _ in range(3):
-            parked_vehicle = CarlaDataProvider.request_new_actor(
-                'vehicle.*', self._parked_transform,
-                rolename='scenario', attribute_filter=self._bp_attributes)
-            if parked_vehicle is not None:
-                break
+        with open('/tmp/bt_park_actual_x.txt', 'w') as f:
+            f.write(f"{self._parked_transform.location.x:.3f}")
 
+        parked_vehicle = CarlaDataProvider.request_new_actor(
+            'vehicle.mitsubishi.fusorosa', self._parked_transform,
+            rolename='scenario', attribute_filter=self._bp_attributes)
         if parked_vehicle is None:
             raise ValueError("BtParkedWithBlindSpotPed: failed to spawn parked vehicle")
 
