@@ -105,11 +105,12 @@ class BtParkedWithBlindSpotPed(BasicScenario):
             vector = waypoint.transform.get_right_vector()
             if self._park_side == 'left':
                 vector *= -1
-            # 0.5 * lane_width places the car at the lane edge (blocking ego's path)
-            # lane_width * 1.0 would place it outside the lane (shoulder) like ParkingCrossingPedestrian
+            # 0.7 * lane_width pushes the bus to the road shoulder, reducing overhang into ego lane.
+            # 0.5 was placing the bus with ~0.29m into ego lane → large avoiding_shift → jerk limit exceeded
+            # → SLGen produced 0 lines at highway speed → ego had to stop before avoidance could start.
             offset_location = carla.Location(
-                waypoint.lane_width * 0.5 * vector.x,
-                waypoint.lane_width * 0.5 * vector.y)
+                waypoint.lane_width * 0.7 * vector.x,
+                waypoint.lane_width * 0.7 * vector.y)
             new_location = waypoint.transform.location + offset_location
         new_location.z += 0.2
 
