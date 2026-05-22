@@ -1,5 +1,9 @@
 #!/usr/bin/python3
 
+import csv
+import os
+import time
+
 import py_trees
 import carla
 
@@ -21,20 +25,56 @@ class InLaneTriggerDistance(py_trees.behaviour.Behaviour):
     Trigger when ego's lane-projected distance to a target drops below threshold.
     Projects ego onto the nearest lane waypoint before measuring distance,
     eliminating lateral variation caused by avoidance shifts.
+
+    Debug: logs every tick to /tmp/bt_trigger_debug.csv
+           columns: wall_t, road_dist, ego_speed, fired
     """
+    DEBUG_DIR = "/tmp/bt_trigger_debug"
+
     def __init__(self, ego, target_location, distance, wmap, name="InLaneTriggerDistance"):
         super().__init__(name)
         self._ego = ego
         self._target_location = target_location
         self._distance = distance
         self._wmap = wmap
+        self._t0_wall = None
+        self._fired = False
+        # one CSV per run — run_id comes from /tmp/bt_run_id.txt (written by run_blindspot.sh)
+        os.makedirs(self.DEBUG_DIR, exist_ok=True)
+        try:
+            with open("/tmp/bt_run_id.txt") as f:
+                run_id = f.read().strip()
+        except Exception:
+            run_id = str(int(time.time()))
+        fname = os.path.join(self.DEBUG_DIR, f"trigger_{run_id}.csv")
+        self._csv_file = open(fname, "w", newline="")
+        self._csv = csv.writer(self._csv_file)
+        self._csv.writerow(["wall_t", "road_dist", "ego_speed", "fired"])
+        print(f"[TriggerDebug] logging to {fname}")
 
     def update(self):
-        ego_wp = self._wmap.get_waypoint(self._ego.get_location())
+        now = time.monotonic()
+        if self._t0_wall is None:
+            self._t0_wall = now
+        rel_t = now - self._t0_wall
+
+        ego_wp    = self._wmap.get_waypoint(self._ego.get_location())
         road_dist = ego_wp.transform.location.distance(self._target_location)
-        if road_dist <= self._distance:
+        ego_v     = self._ego.get_velocity()
+        ego_speed = (ego_v.x**2 + ego_v.y**2 + ego_v.z**2) ** 0.5
+
+        if road_dist <= self._distance and not self._fired:
+            self._fired = True
+            self._csv.writerow([round(rel_t, 4), round(road_dist, 4), round(ego_speed, 4), 1])
+            self._csv_file.flush()
+            print(f"[TriggerFired] t={rel_t:.3f}s  road_dist={road_dist:.3f}m  ego_speed={ego_speed:.3f} m/s")
             return py_trees.common.Status.SUCCESS
+
+        self._csv.writerow([round(rel_t, 4), round(road_dist, 4), round(ego_speed, 4), 0])
         return py_trees.common.Status.RUNNING
+
+    def terminate(self, new_status):
+        self._csv_file.close()
 from srunner.scenarios.basic_scenario import BasicScenario
 from srunner.tools.background_manager import LeaveSpaceInFront, LeaveCrossingSpace
 
