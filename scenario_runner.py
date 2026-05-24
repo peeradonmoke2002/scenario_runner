@@ -38,9 +38,16 @@ from srunner.scenarios.open_scenario import OpenScenario
 from srunner.scenarios.route_scenario import RouteScenario
 from srunner.tools.scenario_parser import ScenarioConfigurationParser
 from srunner.tools.route_parser import RouteParser
-from srunner.tools.osc2_helper import OSC2Helper
-from srunner.scenarios.osc2_scenario import OSC2Scenario
-from srunner.scenarioconfigs.osc2_scenario_configuration import OSC2ScenarioConfiguration
+try:
+    from srunner.tools.osc2_helper import OSC2Helper
+    from srunner.scenarios.osc2_scenario import OSC2Scenario
+    from srunner.scenarioconfigs.osc2_scenario_configuration import OSC2ScenarioConfiguration
+    _OSC2_AVAILABLE = True
+except Exception:  # antlr4 version mismatch — OSC2 not needed for XML scenarios
+    _OSC2_AVAILABLE = False
+    OSC2Helper = None
+    OSC2Scenario = None
+    OSC2ScenarioConfiguration = None
 
 # Version of scenario_runner
 VERSION = '0.9.13'
@@ -153,7 +160,11 @@ class ScenarioRunner(object):
             # Get their module
             module_name = os.path.basename(scenario_file).split('.')[0]
             sys.path.insert(0, os.path.dirname(scenario_file))
-            scenario_module = importlib.import_module(module_name)
+            try:
+                scenario_module = importlib.import_module(module_name)
+            except Exception:  # skip modules that fail to import (e.g. osc2_scenario antlr4 mismatch)
+                sys.path.pop(0)
+                continue
 
             # And their members of type class
             for member in inspect.getmembers(scenario_module, inspect.isclass):
@@ -598,7 +609,8 @@ def main():
     arguments = parser.parse_args()
     # pylint: enable=line-too-long
 
-    OSC2Helper.wait_for_ego = arguments.waitForEgo
+    if _OSC2_AVAILABLE and OSC2Helper is not None:
+        OSC2Helper.wait_for_ego = arguments.waitForEgo
 
     if arguments.list:
         print("Currently the following scenarios are supported:")
