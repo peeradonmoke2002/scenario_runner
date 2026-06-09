@@ -2,58 +2,48 @@
 """
 Phase1BPedTrigger — CARLA-only pedestrian trigger repeatability scenario.
 
-This is a Phase 1B-only ScenarioRunner scenario. It reuses the same blind-spot
-parked-bus geometry and lane-projected trigger logic as BtParkedWithBlindSpotPed,
-but removes ROS 2, Autoware, and BT from the loop:
+A Phase 1B variant of BtParkedWithBlindSpotPed, structured the same way as its sibling
+phase2_ros_controller.py: it SUBCLASSES BtParkedWithBlindSpotPed and reuses the parent's
+geometry helpers (_get_blocker_transform / _get_walker_transform / get_location_on_same_road /
+get_value_parameter / __del__), overriding only what Phase 1B needs.
 
-  - ScenarioRunner spawns/resets the ego, parked bus, and walker.
-  - A custom py_trees behavior applies identical open-loop ego throttle every tick.
-  - The walker starts when the ego reaches the real lane-projected trigger condition.
-  - Per-tick event-grade rows are logged to CSV for repeatability analysis.
+Phase 1B removes ROS 2, Autoware, and BT from the loop — it is CARLA-only:
 
-Parameters are read from XML <other_parameters>.
+  - ScenarioRunner spawns/resets the ego, parked bus, and walker (_initialize_actors).
+  - The custom OpenLoopPedTrigger behavior drives the ego open-loop (constant throttle),
+    fires the lane-projected pedestrian trigger, walks the pedestrian, and logs per-tick
+    event-grade rows to CSV for repeatability analysis — all in ONE behavior so each CSV row
+    samples ego and walker at the same tick.
+
+Because the ego is driven by the scenario (no external controller exists in Phase 1B), the
+ego-drive + logging stay in OpenLoopPedTrigger rather than being decomposed into stock atoms.
+
+Parameters are read from XML <other_parameters>. parked_dist=100 / trigger_dist=4 are set in
+Phase1BPedTrigger.xml because the parent constructor's defaults (30 / 15) would otherwise move
+the bus and trigger point.
 """
 
 import csv
 import math
 import os
-import time
 
 import carla
 import py_trees
 
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
 from srunner.scenariomanager.timer import GameTime
-from srunner.scenarios.basic_scenario import BasicScenario
+from srunner.scenarios.bt_parked_with_blindspot_ped import (
+    BtParkedWithBlindSpotPed,
+    get_location_on_same_road,
+    get_value_parameter,
+)
 
 
 PED_ONSET_SPEED = 0.1
 DEFAULT_OUT_CSV = (
     "/home/peeradon/autoware/src/av-stack-playground/bt_obstacle_eval/"
-    "analysis/determinism/phase1B_ped_trigger/run_01.csv"
+    "analysis/determinism/phase1B_ped_trigger/run_00.csv"
 )
-
-
-def get_value_parameter(config, name, p_type, default):
-    if name in config.other_parameters:
-        return p_type(config.other_parameters[name]['value'])
-    return default
-
-
-def get_location_on_same_road(start_wp, distance, step=1.0):
-    """Follow waypoints up to distance but stop if road_id changes."""
-    traveled = 0.0
-    wp = start_wp
-    while traveled < distance:
-        nexts = wp.next(step)
-        if not nexts:
-            break
-        wp_new = nexts[0]
-        if wp_new.road_id != start_wp.road_id:
-            break
-        traveled += wp_new.transform.location.distance(wp.transform.location)
-        wp = wp_new
-    return wp.transform.location, traveled
 
 
 def speed_of(actor):
@@ -61,72 +51,13 @@ def speed_of(actor):
     return math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
 
 
-def look_at_rotation(camera_location, target_location):
-    """Return a CARLA rotation that points from camera_location to target_location."""
-    dx = target_location.x - camera_location.x
-    dy = target_location.y - camera_location.y
-    dz = target_location.z - camera_location.z
-    horizontal = math.sqrt(dx * dx + dy * dy)
-    yaw = math.degrees(math.atan2(dy, dx))
-    pitch = math.degrees(math.atan2(dz, horizontal))
-    return carla.Rotation(pitch=pitch, yaw=yaw)
-
-
-def chase_spectator(actor):
-    """Move the CARLA spectator camera behind and above the ego vehicle."""
-    world = CarlaDataProvider.get_world()
-    tf = actor.get_transform()
-    fwd = tf.get_forward_vector()
-    cam_loc = carla.Location(
-        x=tf.location.x - 8.0 * fwd.x,
-        y=tf.location.y - 8.0 * fwd.y,
-        z=tf.location.z + 4.0,
-    )
-    cam = carla.Transform(cam_loc, look_at_rotation(cam_loc, tf.location))
-    world.get_spectator().set_transform(cam)
-    return cam
-
-
-def overview_spectator(target_location):
-    """Move the CARLA spectator camera to a fixed overview of the crossing zone."""
-    world = CarlaDataProvider.get_world()
-    target = carla.Location(
-        x=target_location.x,
-        y=target_location.y,
-        z=target_location.z + 1.0,
-    )
-    cam_loc = carla.Location(
-        x=target_location.x - 30.0,
-        y=target_location.y - 22.0,
-        z=34.0,
-    )
-    cam = carla.Transform(cam_loc, look_at_rotation(cam_loc, target))
-    world.get_spectator().set_transform(cam)
-    return cam
-
-
-def top_spectator(target_location, z=45.0):
-    """Move the CARLA spectator camera directly above the crossing zone."""
-    world = CarlaDataProvider.get_world()
-    cam = carla.Transform(
-        carla.Location(
-            x=target_location.x,
-            y=target_location.y,
-            z=z,
-        ),
-        carla.Rotation(pitch=-90.0, yaw=0.0),
-    )
-    world.get_spectator().set_transform(cam)
-    return cam
-
-
 class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
     """Drive ego open-loop, trigger walker, and log Phase 1B event fields."""
 
     def __init__(self, ego, walker, collision_location, trigger_from_center, wmap,
                  ticks, throttle, steer, ped_speed, settle_ticks, out_csv,
-                 camera_mode, realtime, pace_seconds, stop_ego_after_trigger,
-                 freeze_ego_after_trigger, name="OpenLoopPedTrigger"):
+                 stop_ego_after_trigger, freeze_ego_after_trigger,
+                 name="OpenLoopPedTrigger"):
         super().__init__(name)
         self._ego = ego
         self._walker = walker
@@ -139,13 +70,9 @@ class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
         self._ped_speed = ped_speed
         self._settle_ticks = settle_ticks
         self._out_csv = out_csv
-        self._camera_mode = camera_mode
-        self._realtime = realtime
-        self._pace_seconds = pace_seconds
         self._stop_ego_after_trigger = stop_ego_after_trigger
         self._freeze_ego_after_trigger = freeze_ego_after_trigger
         self._ego_frozen = False
-        self._last_wall = None
 
         self._i = 0
         self._triggered = False
@@ -154,14 +81,6 @@ class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
         self._csv_file = None
         self._csv = None
         self._walker_dir = None
-
-    def _update_camera(self):
-        if self._camera_mode == "chase":
-            chase_spectator(self._ego)
-        elif self._camera_mode == "overview":
-            overview_spectator(self._collision_location)
-        elif self._camera_mode == "top":
-            top_spectator(self._collision_location)
 
     def _resolve_out_csv(self):
         root, ext = os.path.splitext(self._out_csv)
@@ -193,32 +112,17 @@ class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
             "tick", "sim_t",
             "ped_x", "ped_y", "ped_z", "ped_yaw", "ped_vx", "ped_vy", "ped_speed", "is_moving",
             "trigger_flag", "t_trigger", "t_ped_start",
-            "ego_x", "ego_y", "ego_yaw", "ego_speed", "road_dist",
+            "x", "y", "yaw", "speed", "road_dist",
         ])
         print(f"[Phase1BPedTrigger] logging to {out_csv}")
         self._walker_dir = self._walker.get_transform().get_forward_vector()
         self._ego.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0))
         self._walker.apply_control(carla.WalkerControl(direction=self._walker_dir, speed=0.0))
-        self._update_camera()
-        print(f"[Phase1BPedTrigger] camera_mode={self._camera_mode}")
-        self._last_wall = time.perf_counter()
-
-    def _pace(self):
-        if not self._realtime:
-            return
-        now = time.perf_counter()
-        if self._last_wall is not None:
-            elapsed = now - self._last_wall
-            if elapsed < self._pace_seconds:
-                time.sleep(self._pace_seconds - elapsed)
-        self._last_wall = time.perf_counter()
 
     def update(self):
-        self._pace()
         if self._i < self._settle_ticks:
             self._ego.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0))
             self._walker.apply_control(carla.WalkerControl(direction=self._walker_dir, speed=0.0))
-            self._update_camera()
             self._i += 1
             return py_trees.common.Status.RUNNING
 
@@ -269,8 +173,6 @@ class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
         ])
         self._csv_file.flush()
 
-        self._update_camera()
-
         self._i += 1
         return py_trees.common.Status.RUNNING
 
@@ -280,94 +182,35 @@ class OpenLoopPedTrigger(py_trees.behaviour.Behaviour):
             self._csv_file = None
 
 
-class Phase1BPedTrigger(BasicScenario):
-    """CARLA-only Phase 1B scenario using the real blind-spot pedestrian geometry."""
+class Phase1BPedTrigger(BtParkedWithBlindSpotPed):
+    """CARLA-only Phase 1B scenario — reuses the parent blind-spot geometry, drives the ego
+    open-loop, and logs per-tick repeatability data via OpenLoopPedTrigger."""
 
     def __init__(self, world, ego_vehicles, config, randomize=False,
                  debug_mode=False, criteria_enable=True, timeout=120):
-
-        self._wmap = CarlaDataProvider.get_map()
-        self._reference_waypoint = self._wmap.get_waypoint(config.trigger_points[0].location)
-        self.timeout = get_value_parameter(config, "timeout", float, float(timeout))
-
-        self._parked_dist = get_value_parameter(config, "parked_dist", float, 100.0)
-        self._park_side = get_value_parameter(config, "park_side", str, "right")
-        if self._park_side not in ("left", "right"):
-            raise ValueError(f"'park_side' must be either 'right' or 'left' but '{self._park_side}' was given")
-        self._yaw_offset = get_value_parameter(config, "yaw_offset", float, 0.0)
-        self._adversary_speed = get_value_parameter(config, "adversary_speed", float, 2.0)
-        self._trigger_dist = get_value_parameter(config, "trigger_dist", float, 4.0)
-
+        # Phase 1B-specific params — set BEFORE super().__init__(), because the parent
+        # constructor runs BasicScenario.__init__ → _initialize_actors / _create_behavior,
+        # which read these (same ordering rule as phase2_ros_controller's self._spawn_ped).
         self._ticks = get_value_parameter(config, "ticks", int, 350)
         self._throttle = get_value_parameter(config, "throttle", float, 0.5)
         self._steer = get_value_parameter(config, "steer", float, 0.0)
         self._settle_ticks = get_value_parameter(config, "settle_ticks", int, 20)
         self._walker_filter = get_value_parameter(config, "walker_filter", str, "walker.pedestrian.0001")
         self._out_csv = get_value_parameter(config, "out_csv", str, DEFAULT_OUT_CSV)
-        self._camera_mode = get_value_parameter(config, "camera_mode", str, "off").lower()
-        if get_value_parameter(config, "chase_view", str, "false").lower() == "true":
-            self._camera_mode = "chase"
-        if self._camera_mode not in ("top", "overview", "chase", "off"):
-            raise ValueError("Phase1BPedTrigger camera_mode must be top, overview, chase, or off")
-        self._realtime = get_value_parameter(config, "realtime", str, "false").lower() == "true"
-        self._pace_seconds = get_value_parameter(config, "pace_seconds", float, 0.05)
         self._stop_ego_after_trigger = (
             get_value_parameter(config, "stop_ego_after_trigger", str, "true").lower() == "true")
         self._freeze_ego_after_trigger = (
             get_value_parameter(config, "freeze_ego_after_trigger", str, "true").lower() == "true")
         self._snap_ego_to_lane_center = (
             get_value_parameter(config, "snap_ego_to_lane_center", str, "true").lower() == "true")
-
-        self._parked_transform = None
-        self._ped_transform = None
-        self._collision_wp = None
-        self._parked_car_half_len = None
         self._trigger_from_center = None
 
-        super().__init__(
-            "Phase1BPedTrigger",
-            ego_vehicles,
-            config,
-            world,
-            debug_mode,
-            criteria_enable=False,
-        )
-
-    def _get_blocker_transform(self, waypoint):
-        if waypoint.lane_type == carla.LaneType.Sidewalk:
-            new_location = waypoint.transform.location
-        else:
-            vector = waypoint.transform.get_right_vector()
-            if self._park_side == "left":
-                vector *= -1
-            offset_location = carla.Location(
-                waypoint.lane_width * 0.7 * vector.x,
-                waypoint.lane_width * 0.7 * vector.y)
-            new_location = waypoint.transform.location + offset_location
-        new_location.z += 0.2
-
-        new_rotation = carla.Rotation(
-            pitch=waypoint.transform.rotation.pitch,
-            yaw=waypoint.transform.rotation.yaw + self._yaw_offset,
-            roll=waypoint.transform.rotation.roll,
-        )
-        return carla.Transform(new_location, new_rotation)
-
-    def _get_walker_transform(self, waypoint):
-        new_rotation = waypoint.transform.rotation
-        new_rotation.yaw += 270 if self._park_side == "right" else 90
-
-        if waypoint.lane_type == carla.LaneType.Sidewalk:
-            new_location = waypoint.transform.location
-        else:
-            vector = waypoint.transform.get_right_vector()
-            if self._park_side == "left":
-                vector *= -1
-            offset_location = carla.Location(waypoint.lane_width * vector.x, waypoint.lane_width * vector.y)
-            new_location = waypoint.transform.location + offset_location
-        new_location.z += 1.2
-
-        return carla.Transform(new_location, new_rotation)
+        # parked_dist / trigger_dist / park_side / yaw_offset / adversary_speed are read by the
+        # parent constructor. Phase 1B needs parked_dist=100, trigger_dist=4 (parent defaults are
+        # 30 / 15) — set in Phase1BPedTrigger.xml's <other_parameters> so the parent reads them
+        # before _initialize_actors places the bus.
+        super().__init__(world, ego_vehicles, config, randomize, debug_mode,
+                         criteria_enable=False, timeout=timeout)
 
     def _initialize_actors(self, config):
         start_tf = config.trigger_points[0]
@@ -431,21 +274,6 @@ class Phase1BPedTrigger(BasicScenario):
             f"trigger_radius={self._trigger_from_center:.2f}m "
             f"out_csv={self._out_csv}"
         )
-        if self._camera_mode == "top":
-            cam = top_spectator(self._collision_wp.transform.location)
-        elif self._camera_mode == "overview":
-            cam = overview_spectator(self._collision_wp.transform.location)
-        elif self._camera_mode == "chase":
-            cam = chase_spectator(self.ego_vehicles[0])
-        else:
-            cam = None
-        if cam is not None:
-            print(
-                "[Phase1BPedTrigger] spectator camera "
-                f"mode={self._camera_mode} "
-                f"loc=({cam.location.x:.2f}, {cam.location.y:.2f}, {cam.location.z:.2f}) "
-                f"rot=(pitch={cam.rotation.pitch:.1f}, yaw={cam.rotation.yaw:.1f})"
-            )
         world = CarlaDataProvider.get_world()
         world.debug.draw_string(self._parked_transform.location + carla.Location(z=3.0),
                                 "PHASE1B BUS", draw_shadow=True,
@@ -473,9 +301,6 @@ class Phase1BPedTrigger(BasicScenario):
             self._adversary_speed,
             self._settle_ticks,
             self._out_csv,
-            self._camera_mode,
-            self._realtime,
-            self._pace_seconds,
             self._stop_ego_after_trigger,
             self._freeze_ego_after_trigger,
         )
