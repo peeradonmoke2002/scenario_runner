@@ -121,6 +121,12 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         self._trigger_dist = get_value_parameter(config, 'trigger_dist', float, 15.0)
 
+        # ped_offset = gap (m) past the parked car's FRONT bumper where the pedestrian
+        # crosses. Default 0.5 reproduces the previous hardcoded placement (extent.x + 0.5),
+        # so existing runs are unchanged; larger values push the crossing point further
+        # downroad (into the ego's path later).
+        self._ped_offset = get_value_parameter(config, 'ped_offset', float, 0.5)
+
         self._bp_attributes    = {}
 
         self._parked_transform  = None
@@ -202,7 +208,8 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         self.other_actors.append(parked_vehicle)  # index 0
 
         # ---- 2. Pedestrian — positioned using actual bounding box of parked car ----
-        walker_dist = parked_vehicle.bounding_box.extent.x + 0.5
+        # extent.x reaches the bus front; + ped_offset is the gap past it (see __init__).
+        walker_dist = parked_vehicle.bounding_box.extent.x + self._ped_offset
         wps = park_wp.next(walker_dist)
         if not wps:
             raise ValueError("BtParkedWithBlindSpotPed: couldn't find walker waypoint")
@@ -240,9 +247,12 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         collision_location = self._collision_wp.transform.location
 
-        # trigger fires when ego front is trigger_dist from parked car rear
-        # → radius from collision_x to ego center = trigger_dist + ego_half_len + 2*pchl + 0.5
-        trigger_from_center = self._trigger_dist + ego_half_len + 2 * pchl + 0.5
+        # trigger fires when ego front is trigger_dist from parked car rear.
+        # ego_center → ped = trigger_dist + ego_half_len + (bus_rear→ped). The ped sits at
+        # bus_front + ped_offset = bus_rear + 2*pchl + ped_offset, so the last term is
+        # 2*pchl + ped_offset. (Was hardcoded +0.5 = the old fixed ped_offset; must track it,
+        # else changing ped_offset shifts where the ego is when the ped fires.)
+        trigger_from_center = self._trigger_dist + ego_half_len + 2 * pchl + self._ped_offset
 
         sequence.add_child(InLaneTriggerDistance(
             self.ego_vehicles[0], collision_location, trigger_from_center,
