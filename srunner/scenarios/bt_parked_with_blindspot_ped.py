@@ -127,6 +127,14 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         # downroad (into the ego's path later).
         self._ped_offset = get_value_parameter(config, 'ped_offset', float, 0.5)
 
+        # Lateral placement from the driving-lane centerline. 0.5 is the lane edge; keep this
+        # above 0.5 so the pedestrian starts close to the road, but not on the road.
+        self._ped_lateral_offset_ratio = get_value_parameter(
+            config, 'ped_lateral_offset_ratio', float, 0.99)
+        if self._ped_lateral_offset_ratio <= 0.5:
+            raise ValueError(
+                "'ped_lateral_offset_ratio' must be > 0.5 to keep the pedestrian off the road")
+
         self._bp_attributes    = {}
 
         self._parked_transform  = None
@@ -177,7 +185,9 @@ class BtParkedWithBlindSpotPed(BasicScenario):
             vector = waypoint.transform.get_right_vector()
             if self._park_side == 'left':
                 vector *= -1
-            offset_location = carla.Location(waypoint.lane_width * vector.x, waypoint.lane_width * vector.y)
+            offset_location = carla.Location(
+                waypoint.lane_width * self._ped_lateral_offset_ratio * vector.x,
+                waypoint.lane_width * self._ped_lateral_offset_ratio * vector.y)
             new_location = waypoint.transform.location + offset_location
         new_location.z += 1.2
 
