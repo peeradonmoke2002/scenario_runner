@@ -15,20 +15,23 @@ Levers (set in the .xml <other_parameter>s, fixed per run):
                    must stop. (Left-lane avoidance is only feasible when the ped
                    is revealed far enough — see thesis notes.)
   ped_stand_offset lateral metres RIGHT of lane center where the ped stands on
-                   the road. Larger => intrudes more => tighter avoid. CALIBRATE
+                   the road. Smaller => intrudes more => tighter avoid. CALIBRATE
                    to the map lane width so it lands in the right part of the lane.
   ped_start_offset lateral metres RIGHT of lane center where the ped starts (on
-                   the sidewalk). Must be > ped_stand_offset (= the walk-out gap).
+                   the sidewalk). Used when ped_walk_distance is not supplied.
+  ped_walk_distance fixed sidewalk-to-stand travel distance. Prefer this during
+                   a stand-offset sweep so every condition has the same walk time.
   ped_dist         longitudinal metres from ego start to the ped's road position
                    (like Scn1 parked_dist=100 — lets the ego reach 30 km/h first).
   adversary_speed  walk speed (m/s).
   cross_after_pass 'true' => ped finishes crossing once the ego has driven past.
+  The scenario has no ego-pass deadline. The pedestrian stays in place until the
+  ego genuinely passes; the external test runner ends the run at the route goal
+  (or reports its own experiment timeout if the ego remains blocked).
 
 Assumes the ego route is on the right lane of a road with a (clear) oncoming
 lane to the LEFT, so left avoidance is geometrically possible.
 """
-
-import time
 
 import carla
 import py_trees
@@ -55,61 +58,102 @@ from srunner.tools.background_manager import LeaveSpaceInFront, LeaveCrossingSpa
 class EgoPassedTargetDistance(py_trees.behaviour.Behaviour):
     """SUCCESS once the ego has gone `pass_dist` BEYOND `target_location`.
 
-    `pass_dist` is the lane-projected gap from the ego CENTER to the target center at the
-    firing moment; the caller bakes ego_half_len + ped_half into it so the realised gap is
-    measured **ego REAR box -> ped RIGHT box edge** (= the distance the ego has passed the
-    ped). Uses the ego's lane-projected waypoint (robust to the lateral avoidance shift) and
-    tracks the closest approach, so it fires only after the ego has actually passed and
-    receded — not while approaching. If the ego stops short and never passes, it never fires
-    and the run ends on timeout.
+    `pass_dist` is the signed road-longitudinal gap from the ego CENTER to the target origin;
+    the caller adds ego rear and pedestrian downstream bounding-box extents so the realised
+    gap is measured **ego rear -> pedestrian downstream edge**. Lateral displacement is
+    deliberately ignored, so shifting into the oncoming lane cannot prevent pass detection.
+    A negative projection means that the ego is still approaching the target.
     """
 
-    def __init__(self, ego, target_location, pass_dist, wmap, name="EgoPassedTargetDistance"):
+    def __init__(self, ego, target_location, pass_dist, road_forward,
+                 name="EgoPassedTargetDistance"):
         super().__init__(name)
         self._ego = ego
         self._target_location = target_location
         self._pass_dist = pass_dist
-        self._wmap = wmap
-        self._min_dist = float('inf')
-        self._approached = False
+        forward_norm = (
+            road_forward.x ** 2 + road_forward.y ** 2 + road_forward.z ** 2
+        ) ** 0.5
+        if forward_norm <= 1e-6:
+            raise ValueError("EgoPassedTargetDistance: road_forward must be non-zero")
+        self._road_forward = carla.Vector3D(
+            road_forward.x / forward_norm,
+            road_forward.y / forward_norm,
+            road_forward.z / forward_norm,
+        )
 
     def update(self):
-        ego_wp = self._wmap.get_waypoint(self._ego.get_location())
-        d = ego_wp.transform.location.distance(self._target_location)
-        if d < self._min_dist:
-            self._min_dist = d
-        if d < 3.0:                      # ego is alongside the target => it has passed
-            self._approached = True
-        if self._approached and d > self._min_dist + self._pass_dist:
+        ego_location = self._ego.get_location()
+        dx = ego_location.x - self._target_location.x
+        dy = ego_location.y - self._target_location.y
+        dz = ego_location.z - self._target_location.z
+        longitudinal = (
+            dx * self._road_forward.x
+            + dy * self._road_forward.y
+            + dz * self._road_forward.z
+        )
+        if longitudinal >= self._pass_dist:
             return py_trees.common.Status.SUCCESS
         return py_trees.common.Status.RUNNING
 
 
-class WaitSeconds(py_trees.behaviour.Behaviour):
-    """SUCCESS after `seconds` from the first tick.
+def get_bool_parameter(config, name, default):
+    """Read a strict but user-friendly boolean from ScenarioRunner XML parameters."""
+    if name not in config.other_parameters:
+        return default
+    raw_value = config.other_parameters[name]['value']
+    normalized = str(raw_value).strip().lower()
+    if normalized in ('true', '1', 'yes', 'on'):
+        return True
+    if normalized in ('false', '0', 'no', 'off'):
+        return False
+    raise ValueError(
+        f"BtRoadsideStandingPed: '{name}' must be true/false, got '{raw_value}'")
 
-    ponytail: wall-clock (time.monotonic), matching InLaneTriggerDistance; fine as a despawn
-    cap, not sim-time exact. If CARLA runs far off real-time, scale `seconds` accordingly.
-    """
 
-    def __init__(self, seconds, name="WaitSeconds"):
-        super().__init__(name)
-        self._seconds = seconds
-        self._t0 = None
+def get_longitudinal_bbox_extents(actor, actor_transform, road_forward):
+    """Return actor-origin -> upstream/downstream OBB extents along the road."""
+    forward_norm = (
+        road_forward.x ** 2 + road_forward.y ** 2 + road_forward.z ** 2
+    ) ** 0.5
+    if forward_norm <= 1e-6:
+        raise ValueError("get_longitudinal_bbox_extents: road_forward must be non-zero")
+    road_forward = carla.Vector3D(
+        road_forward.x / forward_norm,
+        road_forward.y / forward_norm,
+        road_forward.z / forward_norm,
+    )
+    actor_forward = actor_transform.get_forward_vector()
+    actor_right = actor_transform.get_right_vector()
+    actor_up = actor_transform.get_up_vector()
 
-    def update(self):
-        now = time.monotonic()
-        if self._t0 is None:
-            self._t0 = now
-        if now - self._t0 >= self._seconds:
-            return py_trees.common.Status.SUCCESS
-        return py_trees.common.Status.RUNNING
+    def dot(vector):
+        return (
+            vector.x * road_forward.x
+            + vector.y * road_forward.y
+            + vector.z * road_forward.z
+        )
+
+    bbox = actor.bounding_box
+    center_projection = (
+        bbox.location.x * dot(actor_forward)
+        + bbox.location.y * dot(actor_right)
+        + bbox.location.z * dot(actor_up)
+    )
+    half_projection = (
+        abs(dot(actor_forward)) * bbox.extent.x
+        + abs(dot(actor_right)) * bbox.extent.y
+        + abs(dot(actor_up)) * bbox.extent.z
+    )
+    upstream = max(0.0, half_projection - center_projection)
+    downstream = max(0.0, half_projection + center_projection)
+    return upstream, downstream
 
 
 class BtRoadsideStandingPed(BasicScenario):
 
     def __init__(self, world, ego_vehicles, config, randomize=False, debug_mode=False,
-                 criteria_enable=True, timeout=150):
+                 criteria_enable=True, timeout=600):
 
         self._wmap = CarlaDataProvider.get_map()
         self._reference_waypoint = self._wmap.get_waypoint(config.trigger_points[0].location)
@@ -119,20 +163,35 @@ class BtRoadsideStandingPed(BasicScenario):
         self._trigger_dist     = get_value_parameter(config, 'trigger_dist',     float, 50.0)
         self._adversary_speed  = get_value_parameter(config, 'adversary_speed',  float, 1.2)
         self._ped_stand_offset = get_value_parameter(config, 'ped_stand_offset', float, 1.2)
-        self._ped_start_offset = get_value_parameter(config, 'ped_start_offset', float, 3.5)
-        self._cross_after_pass = get_value_parameter(config, 'cross_after_pass', str,   'true')
-        # gap (ego REAR box -> ped RIGHT box edge) the ego must open up after passing
+        configured_start_offset = get_value_parameter(
+            config, 'ped_start_offset', float, 3.5)
+        if 'ped_walk_distance' in config.other_parameters:
+            self._ped_walk_distance = get_value_parameter(
+                config, 'ped_walk_distance', float, 2.3)
+            self._ped_start_offset = self._ped_stand_offset + self._ped_walk_distance
+        else:
+            self._ped_start_offset = configured_start_offset
+            self._ped_walk_distance = self._ped_start_offset - self._ped_stand_offset
+        self._cross_after_pass = get_bool_parameter(config, 'cross_after_pass', True)
+        # gap (ego REAR box -> pedestrian downstream box edge) to open after passing
         # before the ped starts crossing.
         self._ego_pass_dist    = get_value_parameter(config, 'ego_pass_dist',    float, 5.0)
-        # seconds the ped stays on the road (from when it reaches its standing spot) before
-        # it disappears — caps the wait so it never lingers if the ego stops and never passes.
-        self._ped_despawn_time = get_value_parameter(config, 'ped_despawn_time', float, 30.0)
-
+        if self._ped_dist <= 0.0:
+            raise ValueError("BtRoadsideStandingPed: ped_dist must be > 0")
+        if self._trigger_dist < 0.0:
+            raise ValueError("BtRoadsideStandingPed: trigger_dist must be >= 0")
+        if self._adversary_speed <= 0.0:
+            raise ValueError("BtRoadsideStandingPed: adversary_speed must be > 0")
+        if self._ped_stand_offset <= 0.0:
+            raise ValueError("BtRoadsideStandingPed: ped_stand_offset must be > 0")
+        if self._ped_walk_distance <= 0.0:
+            raise ValueError("BtRoadsideStandingPed: ped_walk_distance must be > 0")
         if self._ped_start_offset <= self._ped_stand_offset:
             raise ValueError(
                 "BtRoadsideStandingPed: ped_start_offset must be > ped_stand_offset "
                 "(the sidewalk->road walk-out gap)")
-
+        if self._ego_pass_dist < 0.0:
+            raise ValueError("BtRoadsideStandingPed: ego_pass_dist must be >= 0")
         self._stand_wp            = None
         self._ped_stand_location  = None   # road point where the ped ends up standing
         self._ped_start_transform = None   # sidewalk spawn pose
@@ -153,8 +212,22 @@ class BtRoadsideStandingPed(BasicScenario):
     # ------------------------------------------------------------------
     def _initialize_actors(self, _config):
         # ped's longitudinal road position (no bus — straight ahead of the ego)
-        stand_loc, _ = get_location_on_same_road(self._reference_waypoint, self._ped_dist)
+        stand_loc, traveled = get_location_on_same_road(
+            self._reference_waypoint, self._ped_dist)
+        if traveled + 0.5 < self._ped_dist:
+            raise ValueError(
+                "BtRoadsideStandingPed: ped_dist leaves the reference road before "
+                f"the requested position ({traveled:.1f} m reached of {self._ped_dist:.1f} m)")
         self._stand_wp = self._wmap.get_waypoint(stand_loc)
+        half_lane_width = 0.5 * self._stand_wp.lane_width
+        if self._ped_stand_offset >= half_lane_width:
+            raise ValueError(
+                "BtRoadsideStandingPed: ped_stand_offset must put the pedestrian center "
+                f"inside the right half of the lane (< {half_lane_width:.2f} m)")
+        if self._ped_start_offset <= half_lane_width:
+            raise ValueError(
+                "BtRoadsideStandingPed: ped_start_offset must begin outside the driving lane "
+                f"(> {half_lane_width:.2f} m)")
 
         # publish the obstacle x so auto_test.py can compute the goal past the ped
         # (same /tmp file the blind-spot scenario writes for the parked car)
@@ -192,12 +265,13 @@ class BtRoadsideStandingPed(BasicScenario):
         sequence.add_child(ActorTransformSetter(
             ped, self._ped_start_transform, True, name="PlacePedestrian"))
 
-        # trigger fires when ego front is trigger_dist from the ped. The InLaneTriggerDistance
-        # measures ego-lane-waypoint -> stand_wp center; ego_half_len converts ego center->front
-        # and the ped extent converts ped center->near edge, so trigger_dist is box-front-ego ->
-        # box-of-ped. Confirm the realised gap in /tmp/bt_trigger_debug/trigger_*.csv.
-        ped_box_half = ped.bounding_box.extent.x
-        trigger_from_center = self._trigger_dist + ego_half_len + ped_box_half
+        # Trigger fires at the requested road-longitudinal bbox gap. The walker faces across
+        # the road, so blindly using bbox.extent.x would use the wrong axis. Project its full
+        # oriented bounding box onto the road direction instead.
+        road_forward = self._stand_wp.transform.get_forward_vector()
+        ped_bbox_upstream, ped_bbox_downstream = get_longitudinal_bbox_extents(
+            ped, self._ped_start_transform, road_forward)
+        trigger_from_center = self._trigger_dist + ego_half_len + ped_bbox_upstream
         sequence.add_child(InLaneTriggerDistance(
             ego, self._stand_wp.transform.location, trigger_from_center,
             self._wmap, name="TriggerPedWalkOut"))
@@ -207,37 +281,26 @@ class BtRoadsideStandingPed(BasicScenario):
 
         # ped walks sidewalk -> right-of-lane standing spot, then KeepVelocity ends -> stands.
         # It must hold still > moving_time_threshold (~1 s) for AW avoidance to target it.
-        walk_dist = self._ped_start_offset - self._ped_stand_offset
         sequence.add_child(KeepVelocity(
             ped, self._adversary_speed,
-            duration=walk_dist / self._adversary_speed, distance=walk_dist,
+            duration=self._ped_walk_distance / self._adversary_speed,
+            distance=self._ped_walk_distance,
             name="PedWalkToRoad"))
 
-        # ego arbitrates avoid/stop while the ped stands. The ped waits until the ego has
-        # passed it by ego_pass_dist (ego REAR box -> ped RIGHT box edge), then optionally
-        # finishes crossing. pass_threshold converts the lane-center ego->ped gap into that
-        # rear-ego -> right-ped-edge measure (add ego_half_len + ped along-road half).
-        pass_threshold = self._ego_pass_dist + ego_half_len + ped_box_half
-        stand_then_cross = py_trees.composites.Sequence("PedStandThenCross", memory=True)
-        stand_then_cross.add_child(EgoPassedTargetDistance(
-            ego, self._stand_wp.transform.location, pass_threshold, self._wmap,
+        # Ego arbitrates avoid/stop while the pedestrian stands. Wait indefinitely for a
+        # genuine signed longitudinal pass. auto_test.py owns the experiment deadline and
+        # only reports success at the route goal; this scenario must not end a run early.
+        pass_threshold = self._ego_pass_dist + ego_half_len + ped_bbox_downstream
+        sequence.add_child(EgoPassedTargetDistance(
+            ego, self._stand_wp.transform.location, pass_threshold, road_forward,
             name="EgoPassesPed"))
-        if self._cross_after_pass == 'true':
+
+        if self._cross_after_pass:
             remaining = self._stand_wp.lane_width * 2.0
-            stand_then_cross.add_child(KeepVelocity(
+            sequence.add_child(KeepVelocity(
                 ped, self._adversary_speed,
                 duration=remaining / self._adversary_speed, distance=remaining,
                 name="PedFinishCross"))
-
-        # the ped disappears when (ego passes + finishes cross) OR after ped_despawn_time s,
-        # whichever comes first. Keep the scenario tree alive after despawn so auto_test.py
-        # ends the run from the ego reaching the goal, not from this pedestrian timeout.
-        despawn = py_trees.composites.Parallel(
-            "PedStandUntilPassOrTimeout",
-            policy=py_trees.common.ParallelPolicy.SuccessOnOne())
-        despawn.add_child(stand_then_cross)
-        despawn.add_child(WaitSeconds(self._ped_despawn_time, name="PedDespawnTimeout"))
-        sequence.add_child(despawn)
 
         sequence.add_child(ActorDestroy(ped, name="DestroyPedestrian"))
         sequence.add_child(WaitForever(name="WaitForGoalReachedExternally"))
