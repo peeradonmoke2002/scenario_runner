@@ -24,7 +24,8 @@ Configurable parameters:
 * ``ped_dist``: longitudinal distance from the ego start to the pedestrian.
 * ``trigger_dist``: longitudinal ego-front to pedestrian gap that starts walking.
 * ``adversary_speed``: pedestrian walking speed in metres per second.
-* ``ped_stand_offset``: standing position to the right of the lane centerline.
+* ``ped_stand_offset``: standing position to the right of the lane centerline
+  (0 = lane centre, half the lane width = lane edge).
 * ``ped_walk_distance``: distance from the sidewalk to the standing position.
 * ``ped_start_offset``: alternative explicit sidewalk offset. Configure this or
   ``ped_walk_distance``, but not both.
@@ -241,8 +242,8 @@ class BtRoadsideStandingPed(BasicScenario):
             raise ValueError("BtRoadsideStandingPed: trigger_dist must be >= 0")
         if self._adversary_speed <= 0.0:
             raise ValueError("BtRoadsideStandingPed: adversary_speed must be > 0")
-        if self._ped_stand_offset <= 0.0:
-            raise ValueError("BtRoadsideStandingPed: ped_stand_offset must be > 0")
+        if self._ped_stand_offset < 0.0:
+            raise ValueError("BtRoadsideStandingPed: ped_stand_offset must be >= 0 (0 = lane centre)")
         if self._ped_walk_distance <= 0.0:
             raise ValueError("BtRoadsideStandingPed: ped_walk_distance must be > 0")
         if self._ped_start_offset <= self._ped_stand_offset:
@@ -281,10 +282,10 @@ class BtRoadsideStandingPed(BasicScenario):
                 f"the requested position ({traveled:.1f} m reached of {self._ped_dist:.1f} m)")
         self._stand_wp = self._wmap.get_waypoint(stand_loc)
         half_lane_width = 0.5 * self._stand_wp.lane_width
-        if self._ped_stand_offset >= half_lane_width:
+        if self._ped_stand_offset > half_lane_width + 1e-6:
             raise ValueError(
                 "BtRoadsideStandingPed: ped_stand_offset must put the pedestrian center "
-                f"inside the right half of the lane (< {half_lane_width:.2f} m)")
+                f"inside the right half of the lane (<= {half_lane_width:.2f} m)")
         if self._ped_start_offset <= half_lane_width:
             raise ValueError(
                 "BtRoadsideStandingPed: ped_start_offset must begin outside the driving lane "
