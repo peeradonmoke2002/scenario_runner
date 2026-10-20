@@ -24,11 +24,15 @@ Configurable parameters:
 * ``ped_dist``: longitudinal distance from the ego start to the pedestrian.
 * ``trigger_dist``: longitudinal ego-front to pedestrian gap that starts walking.
 * ``adversary_speed``: pedestrian walking speed in metres per second.
+* ``ped_start_offset``: spawn position on the sidewalk, to the right of the lane
+  centerline.
+* ``ped_walk_distance``: distance from the spawn position to the standing position.
 * ``ped_stand_offset``: standing position to the right of the lane centerline
   (0 = lane centre, half the lane width = lane edge).
-* ``ped_walk_distance``: distance from the sidewalk to the standing position.
-* ``ped_start_offset``: alternative explicit sidewalk offset. Configure this or
-  ``ped_walk_distance``, but not both.
+
+  The three placement values satisfy start = stand + walk. Configure at most two of
+  them and the third is derived; for example a fixed ``ped_start_offset`` with a swept
+  ``ped_walk_distance``.
 * ``ped_wait_timeout``: maximum time at the standing position.
 * ``ego_pass_dist``: clearance behind the ego that releases the pedestrian.
 * ``cross_after_pass``: whether the pedestrian finishes crossing after a pass.
@@ -217,18 +221,30 @@ class BtRoadsideStandingPed(BasicScenario):
         self._ped_dist         = get_value_parameter(config, 'ped_dist',         float, 100.0)
         self._trigger_dist     = get_value_parameter(config, 'trigger_dist',     float, 50.0)
         self._adversary_speed  = get_value_parameter(config, 'adversary_speed',  float, 1.2)
-        self._ped_stand_offset = get_value_parameter(config, 'ped_stand_offset', float, 1.2)
+        # Placement: start = stand + walk. Set at most two of the three; the third is derived.
         has_start_offset = 'ped_start_offset' in config.other_parameters
         has_walk_distance = 'ped_walk_distance' in config.other_parameters
-        if has_start_offset and has_walk_distance:
+        has_stand_offset = 'ped_stand_offset' in config.other_parameters
+        if has_start_offset and has_walk_distance and has_stand_offset:
             raise ValueError(
-                "BtRoadsideStandingPed: specify ped_start_offset or ped_walk_distance, "
-                "not both; the other value is derived")
-        if has_walk_distance:
+                "BtRoadsideStandingPed: specify at most two of ped_start_offset, "
+                "ped_walk_distance and ped_stand_offset; the third is derived")
+        if has_start_offset and has_walk_distance:
+            # Fixed spawn point, walk length chosen: the stand position follows.
+            self._ped_start_offset = get_value_parameter(
+                config, 'ped_start_offset', float, 3.5)
+            self._ped_walk_distance = get_value_parameter(
+                config, 'ped_walk_distance', float, 2.3)
+            self._ped_stand_offset = self._ped_start_offset - self._ped_walk_distance
+        elif has_walk_distance:
+            self._ped_stand_offset = get_value_parameter(
+                config, 'ped_stand_offset', float, 1.2)
             self._ped_walk_distance = get_value_parameter(
                 config, 'ped_walk_distance', float, 2.3)
             self._ped_start_offset = self._ped_stand_offset + self._ped_walk_distance
         else:
+            self._ped_stand_offset = get_value_parameter(
+                config, 'ped_stand_offset', float, 1.2)
             self._ped_start_offset = get_value_parameter(
                 config, 'ped_start_offset', float, 3.5)
             self._ped_walk_distance = self._ped_start_offset - self._ped_stand_offset
