@@ -36,10 +36,28 @@ Configurable parameters:
 * ``ped_wait_timeout``: maximum time at the standing position.
 * ``ego_pass_dist``: clearance behind the ego that releases the pedestrian.
 * ``cross_after_pass``: whether the pedestrian finishes crossing after a pass.
+* ``ped_cross``: crossing mode. The pedestrian walks from ``ped_start_offset`` across
+  both lanes without stopping, then is removed. Only ``ped_start_offset`` may be set;
+  the stand, wait and pass parameters are unused.
+* ``ped_response`` (crossing mode only): ``none`` (default, constant speed), ``yield``,
+  ``hurry`` or ``freeze``. At ``decision_offset`` right of the lane centerline (default
+  the ego-lane edge) the pedestrian checks the ego's distance d. If the ego is moving
+  and closer than ``gap_accept_m``, ``yield`` and ``freeze`` stop there and ``hurry``
+  speeds up to ``hurry_speed``; otherwise it keeps walking. ``freeze`` is ``yield`` with
+  the decision inside the lane (for example 1.4 m), so the stopped pedestrian blocks part
+  of the ego path. ``distance`` picks the response from d instead: below ``freeze_dist``
+  it freezes, below ``gap_accept_m`` it hurries, otherwise it keeps walking.
+  A stopped pedestrian walks on ``startup_time`` after the ego stops before the crossing
+  line or passes it. With ``freeze_hold`` > 0 it instead stays frozen ``freeze_hold`` s
+  after the ego first stops, unless the ego passes first. ``yield_timeout`` is a deadlock
+  guard (no hold only): it runs only while the ego stands still without either cue, and
+  never releases the pedestrian beside it.
 
 The road segment must provide a clear lane on the left for avoidance.
 """
 
+import csv
+import math
 import os
 
 import carla
@@ -66,6 +84,25 @@ from srunner.tools.background_manager import LeaveSpaceInFront, LeaveCrossingSpa
 
 
 ROADSIDE_OUTCOME_FILE = '/tmp/bt_roadside_outcome.txt'
+# Per-tick log of the responding pedestrian; auto_test.py copies it into the bag folder.
+PED_RESPONSE_LOG = '/tmp/bt_ped_response.csv'
+PED_RESPONSES = ('none', 'yield', 'hurry', 'freeze', 'distance')
+# Responses that stop at the decision point and wait for the ego.
+STOP_RESPONSES = ('yield', 'freeze')
+# Below this speed the ego counts as stopped.
+EGO_STOPPED_SPEED = 0.1
+
+
+def time_to_arrival(d, v):
+    """Constant-speed time for the ego front to cover ``d`` metres to the crossing line.
+
+    Returns 0 when the ego is at or past the line and infinity when it is stopped.
+    """
+    if d <= 0.0:
+        return 0.0
+    if v < EGO_STOPPED_SPEED:
+        return math.inf
+    return d / v
 
 
 class EgoPassedTargetDistance(py_trees.behaviour.Behaviour):
@@ -154,6 +191,139 @@ class StandWaitTimedOut(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.FAILURE
 
 
+class CrossingPedResponse(py_trees.behaviour.Behaviour):
+    """Walk the pedestrian across the road with a response at the decision point.
+
+    One behaviour drives the walker every tick, so no gap between segments lets the
+    walker slow down (KeepVelocity.terminate sets the walker speed to 0).
+
+    Phases: ``approach`` (walk to the decision point) -> gap check -> ``continue``,
+    ``hurry``, ``yield`` or ``freeze``. A stopping pedestrian waits for the ego to stop
+    before the crossing line or to pass it, waits ``startup_time``, then walks on.
+    ``yield_timeout`` counts only while the ego stands still without a cue, so a slowly
+    approaching ego never releases the pedestrian early. SUCCESS once ``cross_dist`` is
+    walked.
+
+    Ego distances are measured along ``road_forward`` from the crossing line through
+    the pedestrian origin. ``d`` is the gap from the ego front to the near edge of the
+    pedestrian box, matching the edge-to-edge ``trigger_dist``.
+    """
+
+    def __init__(self, ped, ego, line_location, road_forward, cross_direction, params,
+                 name="CrossingPedResponse"):
+        super().__init__(name)
+        self._ped = ped
+        self._ego = ego
+        self._line = line_location
+        norm = math.sqrt(road_forward.x ** 2 + road_forward.y ** 2)
+        self._forward = (road_forward.x / norm, road_forward.y / norm)
+        norm = math.sqrt(cross_direction.x ** 2 + cross_direction.y ** 2)
+        self._cross_dir = carla.Vector3D(cross_direction.x / norm, cross_direction.y / norm, 0.0)
+        self._p = params
+        self._start = None
+        self._phase = None
+        self._speed = 0.0
+        self._t_still = None
+        self._t_cue = None
+        self._t_hold = None
+        self._log = None
+        self._writer = None
+
+    def initialise(self):
+        self._start = self._ped.get_location()
+        self._phase = 'approach'
+        self._speed = self._p['walk_speed']
+        self._t_still = None
+        self._t_cue = None
+        self._t_hold = None
+        self._log = open(PED_RESPONSE_LOG, 'w', newline='')
+        self._writer = csv.writer(self._log)
+        self._writer.writerow(['t', 'phase', 'walked', 'cmd_speed', 'ego_d', 'ego_v', 'tta', 'event'])
+
+    def _walked(self):
+        loc = self._ped.get_location()
+        return ((loc.x - self._start.x) * self._cross_dir.x
+                + (loc.y - self._start.y) * self._cross_dir.y)
+
+    def _ego_state(self):
+        """(d, v, passed): front-to-pedestrian gap, speed, rear past the pedestrian."""
+        loc = self._ego.get_location()
+        along = ((loc.x - self._line.x) * self._forward[0]
+                 + (loc.y - self._line.y) * self._forward[1])
+        d = -along - self._p['ego_half_len'] - self._p['ped_upstream']
+        passed = along >= self._p['ego_half_len'] + self._p['ped_downstream']
+        return d, CarlaDataProvider.get_velocity(self._ego), passed
+
+    def _walk(self, speed):
+        self._ped.apply_control(carla.WalkerControl(direction=self._cross_dir, speed=speed))
+
+    def update(self):
+        now = GameTime.get_time()
+        walked = self._walked()
+        d, v, passed = self._ego_state()
+        tta = time_to_arrival(d, v)
+        event = ''
+
+        if self._phase == 'approach' and walked >= self._p['decision_walk']:
+            # Respond only to a moving ego inside the accepted gap; TTA is logged, not used.
+            if passed or v < EGO_STOPPED_SPEED or d >= self._p['gap_accept_m']:
+                self._phase = 'continue'
+            elif self._p['response'] == 'distance':
+                self._phase = 'freeze' if d < self._p['freeze_dist'] else 'hurry'
+            else:
+                self._phase = self._p['response']
+            if self._phase == 'hurry':
+                self._speed = self._p['hurry_speed']
+            elif self._phase in STOP_RESPONSES:
+                self._speed = 0.0
+            event = f'decision_{self._phase}'
+        elif self._phase in STOP_RESPONSES:
+            hold = self._p['freeze_hold']
+            if self._t_cue is None:
+                if passed:
+                    self._t_cue, event = now, 'cue_ego_passed'
+                elif hold > 0.0:
+                    # Hold: stay frozen for `hold` s after the ego first stops, so a stopped
+                    # ego has time to show whether it waits or avoids.
+                    if v < EGO_STOPPED_SPEED and self._t_hold is None:
+                        self._t_hold, event = now, 'hold_start'
+                elif v < EGO_STOPPED_SPEED and d > 0.0:
+                    self._t_cue, event = now, 'cue_ego_stopped'
+            # Deadlock timer: runs only while the ego stands still without a cue or hold.
+            if self._t_cue is None and hold <= 0.0 and v < EGO_STOPPED_SPEED:
+                self._t_still = self._t_still if self._t_still is not None else now
+            else:
+                self._t_still = None
+            if self._t_cue is not None and now - self._t_cue >= self._p['startup_time']:
+                self._phase, self._speed = 'resume', self._p['walk_speed']
+                event = 'resume_after_cue'
+            elif (self._t_cue is None and self._t_hold is not None
+                  and now - self._t_hold >= hold and not (d < 0.0 and not passed)):
+                self._phase, self._speed = 'resume', self._p['walk_speed']
+                event = 'resume_after_hold'
+            elif (self._t_still is not None
+                  and now - self._t_still >= self._p['yield_timeout']
+                  and not (d < 0.0 and not passed)):
+                # Never cuts a start-up short and never walks the pedestrian into the side
+                # of an ego that is still beside it.
+                self._phase, self._speed = 'resume', self._p['walk_speed']
+                event = 'resume_after_timeout'
+
+        self._walk(self._speed)
+        self._writer.writerow([f'{now:.3f}', self._phase, f'{walked:.3f}', f'{self._speed:.2f}',
+                               f'{d:.3f}', f'{v:.3f}',
+                               'inf' if math.isinf(tta) else f'{tta:.3f}', event])
+        if walked >= self._p['cross_dist']:
+            return py_trees.common.Status.SUCCESS
+        return py_trees.common.Status.RUNNING
+
+    def terminate(self, new_status):
+        if self._log is not None:
+            self._log.close()
+            self._log = None
+        super().terminate(new_status)
+
+
 def get_bool_parameter(config, name, default):
     """Read a strict but user-friendly boolean from ScenarioRunner XML parameters."""
     if name not in config.other_parameters:
@@ -221,11 +391,22 @@ class BtRoadsideStandingPed(BasicScenario):
         self._ped_dist         = get_value_parameter(config, 'ped_dist',         float, 100.0)
         self._trigger_dist     = get_value_parameter(config, 'trigger_dist',     float, 50.0)
         self._adversary_speed  = get_value_parameter(config, 'adversary_speed',  float, 1.2)
+        self._ped_cross = get_bool_parameter(config, 'ped_cross', False)
         # Placement: start = stand + walk. Set at most two of the three; the third is derived.
         has_start_offset = 'ped_start_offset' in config.other_parameters
         has_walk_distance = 'ped_walk_distance' in config.other_parameters
         has_stand_offset = 'ped_stand_offset' in config.other_parameters
-        if has_start_offset and has_walk_distance and has_stand_offset:
+        if self._ped_cross:
+            if has_walk_distance or has_stand_offset:
+                raise ValueError(
+                    "BtRoadsideStandingPed: ped_cross sets only ped_start_offset; "
+                    "the pedestrian never stands in the lane")
+            self._ped_start_offset = get_value_parameter(
+                config, 'ped_start_offset', float, 4.0)
+            # Placeholders for the shared checks; the crossing length needs the lane width.
+            self._ped_walk_distance = self._ped_start_offset
+            self._ped_stand_offset = 0.0
+        elif has_start_offset and has_walk_distance and has_stand_offset:
             raise ValueError(
                 "BtRoadsideStandingPed: specify at most two of ped_start_offset, "
                 "ped_walk_distance and ped_stand_offset; the third is derived")
@@ -248,6 +429,36 @@ class BtRoadsideStandingPed(BasicScenario):
             self._ped_start_offset = get_value_parameter(
                 config, 'ped_start_offset', float, 3.5)
             self._ped_walk_distance = self._ped_start_offset - self._ped_stand_offset
+        self._ped_response = str(config.other_parameters.get(
+            'ped_response', {'value': 'none'})['value']).strip().lower()
+        if self._ped_response not in PED_RESPONSES:
+            raise ValueError(
+                f"BtRoadsideStandingPed: ped_response must be one of {PED_RESPONSES}, "
+                f"got '{self._ped_response}'")
+        if self._ped_response != 'none' and not self._ped_cross:
+            raise ValueError("BtRoadsideStandingPed: ped_response needs ped_cross")
+        # 33 m = a 4 s gap at the 8.33 m/s cruise speed.
+        self._gap_accept_m  = get_value_parameter(config, 'gap_accept_m',  float, 33.0)
+        # 25 m = a 3 s gap at the 8.33 m/s cruise speed; used only by the distance response.
+        self._freeze_dist   = get_value_parameter(config, 'freeze_dist',   float, 25.0)
+        if not 0.0 < self._freeze_dist <= self._gap_accept_m:
+            raise ValueError("BtRoadsideStandingPed: need 0 < freeze_dist <= gap_accept_m")
+        # > 0: a stopped pedestrian stays frozen this long after the ego stops (0 = resume
+        # startup_time after the ego stops).
+        self._freeze_hold   = get_value_parameter(config, 'freeze_hold',   float, 0.0)
+        if self._freeze_hold < 0.0:
+            raise ValueError("BtRoadsideStandingPed: freeze_hold must be >= 0")
+        self._hurry_speed   = get_value_parameter(config, 'hurry_speed',   float, 2.0)
+        self._startup_time  = get_value_parameter(config, 'startup_time',  float, 2.0)
+        self._yield_timeout = get_value_parameter(config, 'yield_timeout', float, 5.0)
+        # None = the ego-lane edge, resolved once the lane width is known.
+        self._decision_offset = (get_value_parameter(config, 'decision_offset', float, 0.0)
+                                 if 'decision_offset' in config.other_parameters else None)
+        if min(self._gap_accept_m, self._hurry_speed, self._yield_timeout) <= 0.0 \
+                or self._startup_time < 0.0:
+            raise ValueError(
+                "BtRoadsideStandingPed: gap_accept_m, hurry_speed and yield_timeout must be > 0 "
+                "and startup_time >= 0")
         self._cross_after_pass = get_bool_parameter(config, 'cross_after_pass', True)
         # Gap behind the ego before the pedestrian resumes crossing.
         self._ego_pass_dist    = get_value_parameter(config, 'ego_pass_dist',    float, 5.0)
@@ -357,6 +568,46 @@ class BtRoadsideStandingPed(BasicScenario):
 
         if self.route_mode:
             sequence.add_child(LeaveCrossingSpace(self._stand_wp))
+
+        if self._ped_cross:
+            # Walk across both lanes, to the far edge of the left lane, without stopping.
+            # The marker is written at walk onset: the ego may reach its goal first.
+            cross_dist = self._ped_start_offset + 1.5 * self._stand_wp.lane_width
+            sequence.add_child(RecordStandOutcome(
+                'ped_crossing', {'outcome': None}, name="RecordPedCrossing"))
+            if self._ped_response != 'none':
+                # Decide at decision_offset (default the ego-lane edge). The CARLA walker
+                # stops within a few centimetres, so a stopping pedestrian stands there.
+                decision_offset = (0.5 * self._stand_wp.lane_width
+                                   if self._decision_offset is None else self._decision_offset)
+                decision_walk = self._ped_start_offset - decision_offset
+                if decision_offset < 0.0 or decision_walk <= 0.0:
+                    raise ValueError(
+                        "BtRoadsideStandingPed: decision_offset must lie between the lane "
+                        f"centre and ped_start_offset (got {decision_offset:.2f} m)")
+                sequence.add_child(CrossingPedResponse(
+                    ped, ego, self._stand_wp.transform.location, road_forward,
+                    self._ped_start_transform.get_forward_vector(),
+                    {'response': self._ped_response, 'walk_speed': self._adversary_speed,
+                     'hurry_speed': self._hurry_speed, 'gap_accept_m': self._gap_accept_m,
+                     'freeze_dist': self._freeze_dist, 'freeze_hold': self._freeze_hold,
+                     'startup_time': self._startup_time,
+                     'yield_timeout': self._yield_timeout,
+                     'decision_walk': decision_walk, 'cross_dist': cross_dist,
+                     'ego_half_len': ego_half_len, 'ped_upstream': ped_bbox_upstream,
+                     'ped_downstream': ped_bbox_downstream},
+                    name="PedCrossesWithResponse"))
+                sequence.add_child(ActorDestroy(ped, name="DestroyPedestrian"))
+                sequence.add_child(WaitForever(name="WaitForGoalReachedExternally"))
+                return sequence
+            sequence.add_child(KeepVelocity(
+                ped, self._adversary_speed,
+                duration=cross_dist / self._adversary_speed,
+                distance=cross_dist,
+                name="PedWalksAcross"))
+            sequence.add_child(ActorDestroy(ped, name="DestroyPedestrian"))
+            sequence.add_child(WaitForever(name="WaitForGoalReachedExternally"))
+            return sequence
 
         # Walk from the sidewalk to the configured standing position, then stop.
         sequence.add_child(KeepVelocity(
