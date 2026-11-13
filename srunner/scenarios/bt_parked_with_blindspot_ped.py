@@ -18,6 +18,11 @@ from srunner.scenariomanager.scenarioatomics.atomic_criteria import CollisionTes
 from srunner.scenariomanager.scenarioatomics.atomic_trigger_conditions import (
     DriveDistance,
 )
+from srunner.scenarios.bt_ped_response import (
+    PED_RESPONSES,
+    CrossingPedResponse,
+    get_longitudinal_bbox_extents,
+)
 
 
 class InLaneTriggerDistance(py_trees.behaviour.Behaviour):
@@ -134,6 +139,34 @@ class BtParkedWithBlindSpotPed(BasicScenario):
         if self._ped_lateral_offset_ratio <= 0.5:
             raise ValueError(
                 "'ped_lateral_offset_ratio' must be > 0.5 to keep the pedestrian off the road")
+
+        # Responding pedestrian (Scenario 1, Experiment 3). 'none' (default) keeps the paper
+        # behaviour: constant-speed KeepVelocity across the road. Any other value uses the
+        # Scenario 2 CrossingPedResponse rules (bt_ped_response.py) with the decision point at
+        # decision_offset right of the lane centre: 1.0 m by default, about where the pedestrian
+        # first comes out from behind the bus (first LiDAR detection in the paper runs was
+        # 1.0-1.2 m right of the centre). A negative value puts the decision point left of the
+        # centre, e.g. -1.0 = the middle of the ego's bus-avoidance path.
+        self._ped_response = str(config.other_parameters.get(
+            'ped_response', {'value': 'none'})['value']).strip().lower()
+        if self._ped_response not in PED_RESPONSES:
+            raise ValueError(
+                f"BtParkedWithBlindSpotPed: ped_response must be one of {PED_RESPONSES}, "
+                f"got '{self._ped_response}'")
+        self._gap_accept_m    = get_value_parameter(config, 'gap_accept_m',    float, 33.0)
+        self._freeze_dist     = get_value_parameter(config, 'freeze_dist',     float, 25.0)
+        self._freeze_hold     = get_value_parameter(config, 'freeze_hold',     float, 0.0)
+        self._hurry_speed     = get_value_parameter(config, 'hurry_speed',     float, 2.0)
+        self._startup_time    = get_value_parameter(config, 'startup_time',    float, 2.0)
+        self._yield_timeout   = get_value_parameter(config, 'yield_timeout',   float, 5.0)
+        self._decision_offset = get_value_parameter(config, 'decision_offset', float, 1.0)
+        if not 0.0 < self._freeze_dist <= self._gap_accept_m:
+            raise ValueError("BtParkedWithBlindSpotPed: need 0 < freeze_dist <= gap_accept_m")
+        if min(self._hurry_speed, self._yield_timeout) <= 0.0 \
+                or min(self._startup_time, self._freeze_hold) < 0.0:
+            raise ValueError(
+                "BtParkedWithBlindSpotPed: hurry_speed and yield_timeout must be > 0; "
+                "startup_time and freeze_hold must be >= 0")
 
         self._bp_attributes    = {}
 
@@ -273,14 +306,43 @@ class BtParkedWithBlindSpotPed(BasicScenario):
 
         # 3x lane_width guarantees the walker clears from shoulder to opposite shoulder
         crossing_dist = self._collision_wp.lane_width * 3.0
-        crossing_duration = crossing_dist / self._adversary_speed
-        sequence.add_child(KeepVelocity(
-            self.other_actors[1],
-            self._adversary_speed,
-            duration=crossing_duration,
-            distance=crossing_dist,
-            name="PedWalksAcross"
-        ))
+        if self._ped_response == 'none':
+            crossing_duration = crossing_dist / self._adversary_speed
+            sequence.add_child(KeepVelocity(
+                self.other_actors[1],
+                self._adversary_speed,
+                duration=crossing_duration,
+                distance=crossing_dist,
+                name="PedWalksAcross"
+            ))
+        else:
+            # Same walk and crossing length as above, with the Scenario 2 response at the
+            # decision point. d is measured along the road from the ego front to the near edge
+            # of the pedestrian box, as in Scenario 2 (not to the bus rear like trigger_dist).
+            ped = self.other_actors[1]
+            road_forward = self._collision_wp.transform.get_forward_vector()
+            ped_upstream, ped_downstream = get_longitudinal_bbox_extents(
+                ped, self._ped_transform, road_forward)
+            start_offset = self._collision_wp.lane_width * self._ped_lateral_offset_ratio
+            decision_walk = start_offset - self._decision_offset
+            if not 0.0 < decision_walk < crossing_dist:
+                raise ValueError(
+                    "BtParkedWithBlindSpotPed: the decision point must lie on the crossing, "
+                    f"between the spawn point ({start_offset:.2f} m right of the lane centre) "
+                    f"and its end ({crossing_dist - start_offset:.2f} m left); "
+                    f"got decision_offset {self._decision_offset:.2f} m")
+            sequence.add_child(CrossingPedResponse(
+                ped, self.ego_vehicles[0], collision_location, road_forward,
+                self._ped_transform.get_forward_vector(),
+                {'response': self._ped_response, 'walk_speed': self._adversary_speed,
+                 'hurry_speed': self._hurry_speed, 'gap_accept_m': self._gap_accept_m,
+                 'freeze_dist': self._freeze_dist, 'freeze_hold': self._freeze_hold,
+                 'startup_time': self._startup_time,
+                 'yield_timeout': self._yield_timeout,
+                 'decision_walk': decision_walk, 'cross_dist': crossing_dist,
+                 'ego_half_len': ego_half_len, 'ped_upstream': ped_upstream,
+                 'ped_downstream': ped_downstream},
+                name="PedCrossesWithResponse"))
 
         sequence.add_child(ActorDestroy(self.other_actors[1], name="DestroyPedestrian"))
         # Disable physics on parked car so ego can pass without collision/sensor crash
